@@ -121,6 +121,8 @@ input[type=checkbox]{width:26px;height:26px;accent-color:var(--robot)}
 .start .btn{width:100%;font-size:1.25rem;min-height:64px}
 .start .robot{width:180px;padding:16px 14px 14px}
 .start .eyes{gap:44px}
+.start .install{margin-top:10px;font-size:1.05rem;min-height:52px}
+.installhint{margin:12px 0 0!important;font-size:.92rem;background:var(--chip);color:var(--ink)!important;padding:10px 12px;border-radius:12px;text-align:left}
 .link{color:var(--robot);font-weight:800;text-decoration:underline;padding:0}
 select{font:inherit;padding:8px 10px;border-radius:12px;border:2px solid var(--line);background:var(--surface);color:var(--ink)}
 .recmsg{background:var(--chip);color:var(--ink)!important;padding:10px 12px;border-radius:12px}

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#EAF3F1"/>
+  <rect x="250" y="70" width="12" height="60" fill="#2C4466"/>
+  <circle cx="256" cy="70" r="28" fill="#F2B33D"/>
+  <rect x="70" y="210" width="30" height="110" rx="15" fill="#2C4466"/>
+  <rect x="412" y="210" width="30" height="110" rx="15" fill="#2C4466"/>
+  <rect x="90" y="125" width="332" height="300" rx="70" fill="#2C4466"/>
+  <rect x="90" y="125" width="332" height="282" rx="70" fill="#3D5A80"/>
+  <circle cx="190" cy="200" r="30" fill="#fff"/><circle cx="190" cy="200" r="14" fill="#14263A"/>
+  <circle cx="322" cy="200" r="30" fill="#fff"/><circle cx="322" cy="200" r="14" fill="#14263A"/>
+  <rect x="130" y="250" width="252" height="120" rx="28" fill="#14263A"/>
+  <text x="256" y="338" text-anchor="middle" font-family="Verdana, sans-serif" font-weight="700" font-size="80" fill="#F2B33D" letter-spacing="6">A·B</text>
+</svg>

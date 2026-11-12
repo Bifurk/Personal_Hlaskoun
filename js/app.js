@@ -328,3 +328,24 @@ $("go").onclick=async()=>{
   if(!PHONES.some(([k])=>REC[k])) setTimeout(openRec,400);
 };
 renderLevels(); renderModes();
+
+/* ---------- install to home screen ---------- */
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+(()=>{
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  if(standalone) return;
+  const ib=$("install"), hint=$("installHint");
+  const showHint = t => { hint.textContent=t; hint.hidden=false; };
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+  let deferred=null;
+  addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); deferred=e; ib.hidden=false; hint.hidden=true; });
+  addEventListener("appinstalled", ()=>{ ib.hidden=true; showHint("Hotovo, Hláskoun je na ploše."); });
+  ib.onclick=async()=>{
+    if(deferred){ deferred.prompt(); const r=await deferred.userChoice; deferred=null; if(r.outcome==="accepted") ib.hidden=true; return; }
+    showHint(ios
+      ? "Na iPhonu: dole (nebo nahoře) ťukněte na Sdílet ⬆︎ a zvolte „Přidat na plochu“."
+      : "V Chromu ťukněte vpravo nahoře na ⋮ a zvolte „Přidat na plochu“ nebo „Nainstalovat aplikaci“.");
+  };
+  // Tlačítko ukážeme vždy na mobilu; když prohlížeč nenabídne instalaci sám, vysvětlí postup.
+  if(ios || /Android/.test(navigator.userAgent)) ib.hidden=false;
+})();

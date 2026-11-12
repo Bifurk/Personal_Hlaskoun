@@ -1,0 +1,16 @@
+{
+  "name": "Robot Hláskoun",
+  "short_name": "Hláskoun",
+  "description": "Hláskování slov hlasem rodiče pro děti, které se učí číst.",
+  "lang": "cs",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EAF3F1",
+  "theme_color": "#EAF3F1",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

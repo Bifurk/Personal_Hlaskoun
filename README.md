@@ -45,3 +45,7 @@ V repozitáři *Settings → Pages → Build and deployment*: Source *Deploy fro
 
 1. Doplnit slovo do příslušné úrovně v `LEVELS` v `js/data.js`.
 2. Volitelně přidat nahrávku `audio/words/SLOVO.ogg` (velkými písmeny, s diakritikou) a klíč `w_SLOVO` do `AUDIO_KEYS`. Pokud je to vlastní nahraný hlas, přidat klíč i do `OWNV`, jinak má přednost hlas telefonu.
+
+## Instalace na plochu telefonu
+
+Aplikace je PWA (`manifest.webmanifest`, `sw.js`). Na úvodní obrazovce je tlačítko **Přidat na plochu**: v Chromu na Androidu rovnou nabídne instalaci, na iPhonu ukáže postup přes tlačítko Sdílet. Service worker ukládá stránku a stažené nahrávky do mezipaměti, takže po prvním použití aplikace funguje i bez internetu. Při změně souborů v `SHELL` je dobré zvýšit verzi `CACHE` v `sw.js`.

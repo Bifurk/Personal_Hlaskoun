@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#EAF3F1">
 <title>Robot Hláskoun</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Hláskoun">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -19,6 +24,8 @@
     <h2>Robot Hláskoun</h2>
     <p>Hláskuje slova vaším hlasem: na začátku jednou namluvíte hlásky (asi 2 minuty). Celá slova čte hlas telefonu. Cvičte asi 5 minut denně.</p>
     <button class="btn main" id="go">Začít cvičit</button>
+    <button class="btn install" id="install" hidden>📲 Přidat na plochu</button>
+    <p class="installhint" id="installHint" hidden></p>
   </div>
 </div>
 
