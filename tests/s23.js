@@ -88,7 +88,7 @@ function serve() {
     // Tlačítka v dialogu musí být celá vidět bez posouvání (chyba z 13. 11.: „Hotovo“ bylo useknuté pod okrajem)
     const dialogButtonsVisible = (sel) => page.evaluate(sel => {
       const d = document.querySelector(sel), r = d.getBoundingClientRect();
-      const btns = [...d.querySelectorAll(".row button")];
+      const btns = [...d.querySelectorAll(".dlg > .row:last-child button")].filter(b => !b.hidden && b.offsetParent);
       const bad = btns.filter(b => { const q = b.getBoundingClientRect();
         return q.height === 0 || q.top < Math.max(0, r.top) - 1 || q.bottom > Math.min(innerHeight, r.bottom) + 1; });
       return { ok: btns.length > 0 && bad.length === 0, bad: bad.map(b => b.textContent.trim()).join(", "), dialogScroll: d.scrollHeight - d.clientHeight };
@@ -154,6 +154,34 @@ function serve() {
       check(`režim ${modes[i]}: tlačítka reagují i po uspání zvuku`, await page.evaluate(w => word !== w || LEVELS[state.level].length === 1, w0));
     }
 
+    // --- Namluvení celého slova vlastním hlasem ---
+    await page.locator("#modes .mode").nth(3).tap();   // Přečti – slovo je vidět
+    await page.waitForTimeout(300);
+    const recWord = await page.evaluate(() => word);
+    check("tlačítko Namluvit slovo je vidět", await page.isVisible("#openWordRec"));
+    await page.tap("#openWordRec");
+    await page.waitForSelector("#dlgWordRec[open]");
+    check("okno ukazuje správné slovo", (await page.textContent("#wrecWord")).toUpperCase() === recWord);
+    await checkDialog("namlouvání slova", "#dlgWordRec");
+    await page.tap("#wrecRec");
+    await page.waitForFunction(() => /Uloženo/.test(document.querySelector("#wrecMsg").textContent), null, { timeout: 8000 })
+      .then(() => check("nahrání slova mikrofonem", true))
+      .catch(async () => check("nahrání slova mikrofonem", false, await page.textContent("#wrecMsg")));
+    await shot("9-namluvit-slovo");
+    check("po nahrání je nabídka Vrátit původní", await page.isVisible("#wrecOrig"));
+    await page.tap("#dlgWordRec [data-close]");
+    await page.waitForTimeout(400);
+    check("po nahrání slova zvuk běží", await page.evaluate(() => ctx.state === "running"));
+    check("u slova je značka vlastní nahrávky", await page.waitForFunction(() => /namluvené vámi/.test(document.querySelector("#openWordRec").textContent), null, { timeout: 3000 }).then(() => true, () => false));
+    const usesOwn = await page.evaluate(async W => { let used = null; const orig = playBuf;
+      playBuf = b => { used = b; return orig(b); }; await play("w_" + W); playBuf = orig; return used !== null && used === WREC[W]; }, recWord);
+    check("slovo se přehrává z vaší nahrávky", usesOwn);
+    await page.tap("#openList"); await page.waitForSelector("#dlgList[open]");
+    check("v seznamu slov je vlastní nahrávka označená", await page.locator(".gw.own").count() >= 1);
+    await page.tap("#dlgList .row .main");
+    await suspend();
+    await notHung("vlastní slovo se přehraje i po uspání zvuku", () => sayWord(word));
+
     // Znovuotevření aplikace (jako z ikony na ploše) s namluvenými hláskami
     await page.reload({ waitUntil: "load" });
     const t2 = Date.now();
@@ -164,8 +192,71 @@ function serve() {
       const c = q.result.transaction("rec").objectStore("rec").count(); c.onsuccess = () => r(c.result); }; }));
     check("namluvené hlásky zůstaly uložené", own >= 6, `${own}`);
     await page.keyboard.press("Escape");
+    check("vlastní slovo zůstalo uložené", await page.evaluate(W => ownWords.has(W), recWord));
     await suspend();
     await notHung("hláskování po znovuotevření a uspání", () => spellOut(word));
+
+    // Vrácení původního znění slova
+    await page.evaluate(W => { word = W; render(); }, recWord);
+    await page.tap("#openWordRec"); await page.waitForSelector("#dlgWordRec[open]");
+    await page.tap("#wrecOrig"); await page.waitForTimeout(300);
+    check("Vrátit původní smaže vlastní nahrávku", await page.evaluate(W => !ownWords.has(W), recWord));
+    await page.tap("#dlgWordRec [data-close]");
+
+    // --- Audit všech oken (menu) na různých výškách obrazovky S23 ---
+    // 780 = celá obrazovka (aplikace na ploše), 660 = Chrome s lištou adresy a navigací,
+    // 600 = Chrome + zobrazená lišta záložek/oznámení, 320×640 = Samsung „Zvětšení obrazovky“ / větší písmo
+    const DIALOGS = {
+      "#dlgSet": "nastavení", "#dlgRec": "namlouvání hlásek", "#dlgList": "seznam slov",
+      "#dlgWordRec": "namlouvání slova", "#dlgDiag": "diagnostika" };
+    const allDialogs = await page.$$eval("dialog", ds => ds.map(d => "#" + d.id));
+    check("audit zná všechna okna aplikace", allDialogs.every(id => DIALOGS[id]), allDialogs.filter(id => !DIALOGS[id]).join(", "));
+    for (const [w, hgt] of [[360, 780], [360, 660], [360, 600], [320, 640]]) {
+      await page.setViewportSize({ width: w, height: hgt });
+      for (const [sel, name] of Object.entries(DIALOGS)) {
+        await page.evaluate(sel => { // otevřít okno tak, jak to dělá aplikace
+          ({ "#dlgSet": () => $("openSet").click(), "#dlgRec": () => openRec(), "#dlgList": () => $("openList").click(),
+             "#dlgWordRec": () => openWordRec(), "#dlgDiag": () => { renderDiag(); $("dlgDiag").showModal(); } })[sel]();
+        }, sel);
+        await page.waitForTimeout(150);
+        const r = await page.evaluate(sel => {
+          const d = document.querySelector(sel), dr = d.getBoundingClientRect();
+          const inView = el => { const q = el.getBoundingClientRect(); const x = q.left + q.width / 2, y = q.top + q.height / 2;
+            return q.height > 0 && q.top >= Math.max(0, dr.top) - 1 && q.bottom <= Math.min(innerHeight, dr.bottom) + 1 && el.contains(document.elementFromPoint(x, y)); };
+          const close = [...d.querySelectorAll(".dlg > .row:last-child button")].filter(b => !b.hidden);
+          const closeOk = close.length > 0 && close.every(inView);
+          // všechno ostatní ovladatelné musí jít na posunutí dosáhnout
+          const unreachable = [];
+          for (const el of d.querySelectorAll("button, input, select, textarea")) {
+            if (el.hidden || !el.offsetParent) continue;
+            el.scrollIntoView({ block: "nearest" });
+            if (!inView(el)) unreachable.push((el.textContent || el.id || el.tagName).trim().slice(0, 20));
+          }
+          d.querySelector(".dlg").scrollTop = 0;
+          const fits = dr.top >= 0 && dr.bottom <= innerHeight && dr.right <= innerWidth && d.scrollWidth <= d.clientWidth + 1;
+          return { closeOk, close: close.map(b => b.textContent.trim()).join("/"), unreachable, fits };
+        }, sel);
+        check(`${w}×${hgt} ${name}: ${r.close} vidět bez posouvání`, r.closeOk);
+        check(`${w}×${hgt} ${name}: vše ovladatelné je dosažitelné`, r.unreachable.length === 0, r.unreachable.join(", "));
+        check(`${w}×${hgt} ${name}: okno se vejde na obrazovku`, r.fits);
+        if (hgt === 600 || w === 320) await shot(`menu-${w}x${hgt}-${sel.slice(4)}`);
+        await page.evaluate(sel => document.querySelector(sel).close(), sel);
+      }
+      // hlavní obrazovka ve všech režimech: tlačítka dole i nahoře celá vidět, nic nepřetéká do strany
+      for (let i = 0; i < modes.length; i++) {
+        await page.evaluate(i => { state.mode = MODES[i].id; renderModes(); render(); }, i);
+        await page.waitForTimeout(100);
+        const m = await page.evaluate(() => {
+          const cut = [...document.querySelectorAll("#actions button, header button, #modes button, #panel button")].filter(b => {
+            const q = b.getBoundingClientRect(); return q.width > 0 && (q.left < -1 || q.right > innerWidth + 1 || b.scrollWidth > b.clientWidth + 2); });
+          return { cut: cut.map(b => b.textContent.trim().slice(0, 15)), hs: document.documentElement.scrollWidth <= innerWidth };
+        });
+        check(`${w}×${hgt} režim ${modes[i]}: tlačítka celá vidět`, m.cut.length === 0 && m.hs, m.cut.join(", "));
+        if (w === 320) await shot(`main-${w}x${hgt}-${i}`);
+      }
+    }
+    await page.setViewportSize(S23.viewport);
+    await page.waitForTimeout(400);
 
     // Diagnostika
     await page.tap("#openList"); await page.waitForSelector("#dlgList[open]");

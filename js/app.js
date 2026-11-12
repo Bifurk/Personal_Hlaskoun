@@ -124,6 +124,7 @@ async function play(key){
   if(!ctx) return;
   try{
   if(key.startsWith("p_")){ const b=REC[key.slice(2)]; if(b) return playBuf(b); return; }
+  if(key.startsWith("w_") && ownWords.has(key.slice(2))){ const b=await loadOwnWord(key.slice(2)); if(b) return playBuf(b); }
   if(OWNV.has(key)){ const b=await load(key); if(b) return playBuf(b); }
   if(useDevice()){
     const text = key.startsWith("w_") ? key.slice(2).toLowerCase() : PHR[key.slice(2)];
@@ -158,17 +159,31 @@ let dbp=null;
 function db(){ if(!dbp) dbp=new Promise((res,rej)=>{ const r=indexedDB.open("hlaskoun",1);
   r.onupgradeneeded=()=>r.result.createObjectStore("rec"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); return dbp; }
 async function dbOp(mode,fn){ const d=await db(); return new Promise((res,rej)=>{ const tx=d.transaction("rec",mode); const r=fn(tx.objectStore("rec")); tx.oncomplete=()=>res(r&&r.result); tx.onerror=()=>rej(tx.error); }); }
-function trim(b){
+function trim(b, rel=0.08, padS=0.03){
   const d=b.getChannelData(0); let peak=0; for(const x of d) peak=Math.max(peak,Math.abs(x));
   if(peak<0.01) return null;
-  const th=peak*0.08; let s=0,e=d.length-1; while(s<e&&Math.abs(d[s])<th)s++; while(e>s&&Math.abs(d[e])<th)e--;
-  const pad=Math.floor(b.sampleRate*0.03); s=Math.max(0,s-pad); e=Math.min(d.length,e+pad);
+  const th=peak*rel; let s=0,e=d.length-1; while(s<e&&Math.abs(d[s])<th)s++; while(e>s&&Math.abs(d[e])<th)e--;
+  const pad=Math.floor(b.sampleRate*padS); s=Math.max(0,s-pad); e=Math.min(d.length,e+pad);
   const out=ctx.createBuffer(1,e-s,b.sampleRate), o=out.getChannelData(0), g=0.9/peak;
   for(let i=0;i<e-s;i++) o[i]=d[s+i]*g;
   const f=Math.min(200,o.length); for(let i=0;i<f;i++){ o[i]*=i/f; o[o.length-1-i]*=i/f; }
   return out;
 }
-async function decodeRec(blob){ const b=await ctx.decodeAudioData(await blob.arrayBuffer()); return trim(b); }
+async function decodeRec(blob, word=false){ const b=await ctx.decodeAudioData(await blob.arrayBuffer()); return word ? trim(b, 0.03, 0.08) : trim(b); }
+
+/* ---------- vlastní nahrávky celých slov (klíč "w:SLOVO" v IndexedDB) ---------- */
+const ownWords=new Set(), WREC={};
+async function loadOwnWordList(){
+  try{ const keys=await dbOp("readonly",s=>s.getAllKeys()); ownWords.clear();
+    for(const k of keys||[]) if(typeof k==="string" && k.startsWith("w:")) ownWords.add(k.slice(2)); }
+  catch(e){ diag("seznam vlastních slov: "+e.message); }
+}
+async function loadOwnWord(W){
+  if(WREC[W]) return WREC[W];
+  try{ const blob=await dbOp("readonly",s=>s.get("w:"+W)); if(!blob) return null;
+    WREC[W]=await decodeRec(blob,true); return WREC[W]; }
+  catch(e){ diag("vlastní slovo "+W+": "+e.message); return null; }
+}
 async function loadRecs(){
   try{ for(const [k] of PHONES){ const blob=await dbOp("readonly",s=>s.get(k)); if(blob){ const b=await decodeRec(blob); if(b) REC[k]=b; } } }catch(e){}
   await Promise.all(PHONES.filter(([k])=>!REC[k] && AUDIO_KEYS.has("p_"+k))
@@ -218,7 +233,14 @@ function renderModes(){
 }
 
 /* ---------- modes ---------- */
-function render(){ playToken++; mood(); ({spell:rSpell,guess:rGuess,write:rWrite,read:rRead})[state.mode](); }
+/* Posun na další slovo se zpožděním (po pochvale). Zruší se, když uživatel mezitím
+   cokoli udělá (jiné slovo, režim, otevře okno) – jinak by se slovo změnilo pod rukama. */
+let navToken=0;
+function nextLater(ms){ const t=++navToken; setTimeout(()=>{ if(t===navToken && !document.querySelector("dialog[open]")) nextWord(); },ms); }
+document.addEventListener("click",e=>{ if(!e.target.closest(".good")) navToken++; },{capture:true});
+function render(){ playToken++; mood(); ({spell:rSpell,guess:rGuess,write:rWrite,read:rRead})[state.mode]();
+  panel.append(h("div",{class:"wordrecrow"},h("button",{class:"wordrec",id:"openWordRec",onclick:openWordRec},
+    ownWords.has(word) ? "🎙 Slovo namluvené vámi · upravit" : "🎙 Namluvit slovo"))); }
 
 function rSpell(){
   const ph=spell(word); let revealed=false;
@@ -232,7 +254,7 @@ function rSpell(){
     ? h("div",{class:"tip"},"Hlásky zatím nejsou namluvené, hláskujte proto podle displeje sami: robot vám ukazuje tempo. ",h("button",{class:"link",onclick:openRec},"Namluvit hlásky"))
     : h("p",{class:"tip"},"Robot slovo vyhláskuje vaším hlasem, dítě ho řekne celé. Když neví, dejte nápovědu (třeba „mám to na obličeji“) a nechte hláskovat znovu."));
   setActions(btn("🔁 Hláskuj","",go), btn("👀 Ukázat","",reveal),
-    btn("✓ Složil(a)","good",()=>{ setCircle(state.level,word,true); if(!revealed) reveal(); mood("happy"); praise(); setTimeout(nextWord,1600); }),
+    btn("✓ Složil(a)","good",()=>{ setCircle(state.level,word,true); if(!revealed) reveal(); mood("happy"); praise(); nextLater(1600); }),
     btn("Další ›","main",nextWord));
   setTimeout(go,350);
 }
@@ -293,7 +315,7 @@ function rRead(){
   screen.replaceChildren(wd);
   panel.replaceChildren(h("p",{class:"tip"},"Dítě slovo přečte nahlas. Nezná písmeno? Ať se zeptá – to je v pořádku. Robot pak může slovo přečíst pro kontrolu."));
   setActions(btn("🔊 Přečti","",()=>sayWord(word)), btn("🔁 Hláskuj","",()=>spellOut(word)),
-    btn("✓ Přečetl(a)","good",()=>{ setCircle(state.level,word,true); mood("happy"); praise(); setTimeout(nextWord,1300); }),
+    btn("✓ Přečetl(a)","good",()=>{ setCircle(state.level,word,true); mood("happy"); praise(); nextLater(1300); }),
     btn("Další ›","main",nextWord));
 }
 
@@ -302,7 +324,7 @@ document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",
 function renderGrid(){
   const c=circled(state.level);
   $("listTitle").textContent=`Úroveň ${state.level} · ${c.size} z ${LEVELS[state.level].length}`;
-  $("grid").replaceChildren(...LEVELS[state.level].map(w=>h("button",{class:"gw"+(c.has(w)?" c":""),onclick:()=>{ setCircle(state.level,w,!circled(state.level).has(w)); renderGrid(); }},cs(w))));
+  $("grid").replaceChildren(...LEVELS[state.level].map(w=>h("button",{class:"gw"+(c.has(w)?" c":"")+(ownWords.has(w)?" own":""),onclick:()=>{ setCircle(state.level,w,!circled(state.level).has(w)); renderGrid(); }},cs(w))));
 }
 $("openList").onclick=()=>{ renderGrid(); $("dlgList").showModal(); };
 $("resetLv").onclick=()=>{ if(confirm("Smazat všechny kroužky v této úrovni?")){ progress[state.level]=[]; saveAll(); renderLevels(); renderGrid(); } };
@@ -358,10 +380,68 @@ $("recTest").onclick=()=>spellOut(word||"NOS");
 $("dlgRec").addEventListener("close",()=>{ stopRec(); if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } ensureAudio().finally(render); });
 $("voice").onchange=e=>{ settings.voice=e.target.value; saveAll(); };
 
+/* ---------- namlouvání celého slova ---------- */
+let wrec=null;   // {W, mr, timer, blob, buf}
+const WREC_MAX=3000;
+function wrecMsg(t){ $("wrecMsg").textContent=t; }
+function renderWordRec(){
+  const W=wrec.W, has=ownWords.has(W);
+  $("wrecWord").textContent=cs(W);
+  $("wrecState").textContent = has ? "Teď se přehrává vaše nahrávka." : (OWNV.has("w_"+W) ? "Teď se přehrává původní nahrávka." : "Teď slovo čte hlas telefonu.");
+  $("wrecOrig").hidden=!has;
+  $("wrecRec").classList.toggle("on",!!wrec.mr);
+  $("wrecRec").textContent = wrec.mr ? "⏹ Zastavit" : (has ? "🎙 Nahrát znovu" : "🎙 Nahrát");
+}
+function openWordRec(){
+  if(!word) return;
+  playToken++;
+  wrec={W:word};
+  wrecMsg("Ťukněte na Nahrát a řekněte celé slovo zřetelně, přirozeným tempem. Nahrávání se samo zastaví po 3 s.");
+  renderWordRec(); $("dlgWordRec").showModal();
+}
+function stopWordRec(){ if(!wrec||!wrec.mr) return; clearTimeout(wrec.timer); const mr=wrec.mr; wrec.mr=null; if(mr.state==="recording") setTimeout(()=>mr.stop(),150); renderWordRec(); }
+$("wrecRec").onclick=async()=>{
+  if(wrec.mr){ stopWordRec(); return; }
+  wrecMsg("Připravuji mikrofon…");
+  let s;
+  try{ await ensureAudio(); s=await getMic(); }
+  catch(err){
+    wrecMsg(err&&(err.name==="NotAllowedError"||err.name==="SecurityError")
+      ? "Mikrofon je zablokovaný. V Chromu ťukněte na ikonu vlevo od adresy → Oprávnění → Mikrofon → Povolit."
+      : "Mikrofon se nepodařilo spustit ("+((err&&(err.name||err.message))||"chyba")+").");
+    diag("nahrávání slova: "+((err&&(err.name||err.message))||err)); return;
+  }
+  const W=wrec.W, chunks=[], mr=new MediaRecorder(s);
+  mr.ondataavailable=ev=>{ if(ev.data&&ev.data.size) chunks.push(ev.data); };
+  mr.onstop=async()=>{
+    const blob=new Blob(chunks,{type:mr.mimeType||"audio/webm"});
+    try{
+      await ensureAudio();
+      const buf=await decodeRec(blob,true);
+      if(!buf){ wrecMsg("Nic nebylo slyšet. Mluvte blíž k telefonu a zkuste to znovu."); renderWordRec(); return; }
+      await dbOp("readwrite",st=>st.put(blob,"w:"+W));
+      ownWords.add(W); WREC[W]=buf;
+      diag("namluveno slovo "+W+" ("+buf.duration.toFixed(2)+" s)");
+      wrecMsg("Uloženo. Takhle teď slovo zní. Když se nelíbí, nahrajte ho znovu.");
+      renderWordRec(); await playBuf(buf);
+    }catch(err){ wrecMsg("Nahrávku se nepodařilo zpracovat, zkuste to znovu."); diag("zpracování slova "+W+": "+err.message); renderWordRec(); }
+  };
+  mr.start(); wrec.mr=mr; wrec.timer=setTimeout(stopWordRec,WREC_MAX);
+  wrecMsg("Nahrávám… řekněte „"+W.toLowerCase()+"“."); renderWordRec();
+};
+$("wrecPlay").onclick=async()=>{ if(wrec.mr) stopWordRec(); playToken++; await play("w_"+wrec.W); };
+$("wrecOrig").onclick=async()=>{
+  const W=wrec.W;
+  try{ await dbOp("readwrite",st=>st.delete("w:"+W)); }catch(e){ diag("mazání slova "+W+": "+e.message); }
+  ownWords.delete(W); delete WREC[W]; diag("vráceno původní slovo "+W);
+  wrecMsg("Vráceno původní znění."); renderWordRec(); playToken++; play("w_"+W);
+};
+$("dlgWordRec").addEventListener("close",()=>{ stopWordRec(); if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } ensureAudio().finally(render); });
+
 /* ---------- start ---------- */
 $("go").onclick=async()=>{
   await ensureAudio();
-  await loadRecs(); pickVoice();
+  await loadRecs(); await loadOwnWordList(); pickVoice();
   $("start").remove(); startTimer(); nextWord();
   if(!PHONES.some(([k])=>REC[k])) setTimeout(openRec,400);
 };
@@ -380,6 +460,7 @@ function renderDiag(){
     "Prohlížeč: "+navigator.userAgent,
     "Režim: "+(matchMedia("(display-mode: standalone)").matches?"aplikace na ploše":"prohlížeč"),
     "Zvuk: "+(ctx?ctx.state:"nespuštěn")+", hlásek načteno: "+Object.keys(REC).length+"/"+PHONES.length,
+    "Vlastní nahrávky slov: "+ownWords.size+(ownWords.size?" ("+[...ownWords].slice(0,30).join(", ")+")":""),
     "Hlas telefonu: "+(csVoice?csVoice.name:"žádný český"),
     "Service worker: "+(navigator.serviceWorker&&navigator.serviceWorker.controller?"aktivní":"ne"),
     "Úroveň/režim/slovo: "+state.level+" / "+state.mode+" / "+word,

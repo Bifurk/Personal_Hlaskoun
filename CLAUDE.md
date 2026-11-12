@@ -18,6 +18,7 @@ Jde o emulaci v Chromiu, ne o skutečný telefon – u věcí, které emulace ne
 ## Známé pasti na Androidu
 
 - Android/Samsung **uspí AudioContext** po použití mikrofonu, při odchodu na pozadí nebo hovoru. Uspaný kontext nikdy nezavolá `onended` → aplikace zamrzne. Veškeré přehrávání proto jde přes `playBuf()`/`ensureAudio()` (probuzení, případně nový kontext, pojistný timeout). Nikdy nepřehrávat zvuk mimo ně. `tests/s23.js` to kontroluje.
+- **Okna (dialogy) a tlačítka se musí vejít** i na nižší obrazovku (Chrome s lištami) a na úzkou (Samsung „Zvětšení obrazovky“). Poslední řádek tlačítek v okně (`.dlg > .row:last-child`, Hotovo/Zavřít) je přilepený dole a musí být vidět bez posouvání. `tests/s23.js` to kontroluje pro každé okno na 360×780, 360×660, 360×600 a 320×640 a stejně tak hlavní obrazovku ve všech režimech. **Nové okno = přidat ho do `DIALOGS` v testu** (jinak test selže na „audit zná všechna okna“).
 - Když uživatel hlásí problém z telefonu: požádat ho o text z **Nastavení → Diagnostika → Zkopírovat**.
 
 ## Poznámky
