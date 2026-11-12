@@ -132,7 +132,8 @@ function trim(b){
 async function decodeRec(blob){ const b=await ctx.decodeAudioData(await blob.arrayBuffer()); return trim(b); }
 async function loadRecs(){
   try{ for(const [k] of PHONES){ const blob=await dbOp("readonly",s=>s.get(k)); if(blob){ const b=await decodeRec(blob); if(b) REC[k]=b; } } }catch(e){}
-  for(const [k] of PHONES){ if(!REC[k] && AUDIO_KEYS.has("p_"+k)){ try{ REC[k]=await fetchAudio("p_"+k); }catch(e){} } }
+  await Promise.all(PHONES.filter(([k])=>!REC[k] && AUDIO_KEYS.has("p_"+k))
+    .map(async([k])=>{ try{ REC[k]=await fetchAudio("p_"+k); }catch(e){} }));
 }
 /* ---------- timer ---------- */
 let secs=300, tick=null, doneSaid=false;
