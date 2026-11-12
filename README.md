@@ -25,6 +25,8 @@ audio/phrases/    pochvaly a hlášky („správně“, „zkus to znovu“…)
 
 Pod každým slovem je **🎙 Namluvit slovo**: když slovo nezní dobře, rodič ho nahraje vlastním hlasem a jeho nahrávka má přednost (lze vrátit původní). V seznamu slov jsou takto namluvená slova označená 🎙.
 
+V **Nastavení** jde zvolit hlas pro celá slova (moje nahrávky / nahrávky aplikace / vždy hlas telefonu / robot) a pro hlásky (moje / výchozí nahrávky aplikace). Vlastní nahrávky se přepnutím nemažou. Nejlepší hlas telefonu: v Androidu *Převod textu na řeč → Google → stáhnout češtinu*.
+
 Hlásky i slova namluvené rodičem se ukládají jen v prohlížeči daného telefonu (IndexedDB), postup a nastavení v `localStorage`. Žádný server není potřeba.
 
 Celá slova bez vlastní nahrávky čte hlas telefonu (Web Speech API, čeština).

@@ -156,3 +156,5 @@ select{font:inherit;padding:8px 10px;border-radius:12px;border:2px solid var(--l
   .actions .btn{font-size:.9rem;padding:4px 4px;border-radius:16px}
   .app{padding-left:12px;padding-right:12px}
 }
+.set.stack{flex-direction:column;align-items:stretch;gap:6px}
+.set.stack select{width:100%}

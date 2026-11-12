@@ -182,6 +182,40 @@ function serve() {
     await suspend();
     await notHung("vlastní slovo se přehraje i po uspání zvuku", () => sayWord(word));
 
+    // --- Volba hlasu v Nastavení: odkud se slovo/hláska opravdu přehraje ---
+    const source = (W) => page.evaluate(async W => {
+      let src = "nic"; const pb = playBuf, tts = ttsSay;
+      playBuf = b => { src = b === WREC[W] ? "moje" : (b === buf["w_" + W] ? (OWNV.has("w_" + W) ? "aplikace" : "robot") : "jiné"); return pb(b); };
+      ttsSay = t => { src = "telefon"; return Promise.resolve(); };
+      await play("w_" + W); playBuf = pb; ttsSay = tts; return src;
+    }, W);
+    // emulace nemá český hlas telefonu – podstrčíme ho (pickVoice by ho jinak při otevření nastavení vynuloval)
+    await page.evaluate(() => { pickVoice = () => { csVoice = { name: "Google čeština (test)", lang: "cs-CZ" }; }; pickVoice(); });
+    const appWord = await page.evaluate(W => [...OWNV].map(k => k.slice(2)).find(w => w !== W), recWord);
+    await page.tap("#openSet"); await page.waitForSelector("#dlgSet[open]");
+    check("v nastavení je volba hlasu slov i hlásek", await page.isVisible("#wordVoice") && await page.isVisible("#phoneVoice"));
+    const expect = { own: ["moje", "aplikace"], recorded: ["aplikace", "aplikace"], device: ["telefon", "telefon"], robot: ["robot", "aplikace"] };
+    for (const [v, [mine, app]] of Object.entries(expect)) {
+      await page.selectOption("#wordVoice", v); await page.waitForTimeout(150);
+      const a = await source(recWord), b = await source(appWord);
+      // u „recorded“ se moje nahrávka nepoužije: recWord (bez nahrávky aplikace) jde na hlas telefonu
+      const okMine = v === "recorded" ? (a === "telefon" || a === "aplikace") : a === mine;
+      check(`hlas slov „${v}“: moje namluvené slovo → ${a}`, v === "robot" ? ["robot", "aplikace"].includes(a) : okMine);
+      check(`hlas slov „${v}“: slovo s nahrávkou aplikace → ${b}`, v === "robot" ? b === "robot" || b === "aplikace" : b === app);
+    }
+    await page.selectOption("#wordVoice", "device");
+    check("popis hlasu ukazuje hlas telefonu", /Google čeština/.test(await page.textContent("#voiceNote")));
+    const ph = await page.evaluate(() => Object.keys(OWNP)[0]);
+    await page.selectOption("#phoneVoice", "default"); await page.waitForTimeout(150);
+    check("hlásky „výchozí“: použije se nahrávka aplikace", await page.evaluate(k => REC[k] === DEFP[k] && REC[k] !== OWNP[k], ph));
+    await page.selectOption("#phoneVoice", "own"); await page.waitForTimeout(150);
+    check("hlásky „moje“: použije se moje nahrávka", await page.evaluate(k => REC[k] === OWNP[k], ph));
+    await page.selectOption("#phoneVoice", "default");
+    await checkDialog("nastavení s volbou hlasu", "#dlgSet");
+    await shot("10-nastaveni-hlas");
+    await page.tap("#dlgSet .row:last-child .main");
+    await page.evaluate(() => { csVoice = null; });   // zrušit podstrčený hlas
+
     // Znovuotevření aplikace (jako z ikony na ploše) s namluvenými hláskami
     await page.reload({ waitUntil: "load" });
     const t2 = Date.now();
@@ -193,6 +227,9 @@ function serve() {
     check("namluvené hlásky zůstaly uložené", own >= 6, `${own}`);
     await page.keyboard.press("Escape");
     check("vlastní slovo zůstalo uložené", await page.evaluate(W => ownWords.has(W), recWord));
+    check("volba hlasu se pamatuje", await page.evaluate(() => settings.wordVoice === "device" && settings.phoneVoice === "default"));
+    check("moje hlásky zůstaly uložené i při výchozích hláskách", await page.evaluate(() => Object.keys(OWNP).length >= 6));
+    await page.evaluate(() => { settings.wordVoice = "own"; settings.phoneVoice = "own"; saveAll(); applyPhoneVoice(); });
     await suspend();
     await notHung("hláskování po znovuotevření a uspání", () => spellOut(word));
 

@@ -18,7 +18,16 @@ const store = {
   get(k,d){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } },
   set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
 };
-let settings = Object.assign({gap:450, assim:true, letters:false, lower:false, voice:"device"}, store.get("hl-settings",{}));
+let settings = Object.assign({gap:450, assim:true, letters:false, lower:false, wordVoice:"own", phoneVoice:"own"}, store.get("hl-settings",{}));
+// starší nastavení „voice: robot“ → nové wordVoice
+if(settings.voice){ if(settings.voice==="robot" && !store.get("hl-settings",{}).wordVoice) settings.wordVoice="robot"; delete settings.voice; }
+/* Hlas pro celá slova:
+   own      – moje nahrávka → nahrávka aplikace (Ondra) → hlas telefonu
+   recorded – nahrávka aplikace (Ondra) → hlas telefonu (moje nahrávky se nepoužijí)
+   device   – vždy hlas telefonu (Google/Samsung); bez českého hlasu robot
+   robot    – vždy nahrávky aplikace (robotický hlas)
+   Hlásky: own – moje nahrávky, kde jsou, jinak výchozí; default – jen výchozí nahrávky aplikace */
+const WORD_VOICES={own:"Moje nahrávky, jinak nejlepší dostupný",recorded:"Nahrávky aplikace, jinak hlas telefonu",device:"Vždy hlas telefonu (Google/Samsung)",robot:"Robot"};
 let progress = store.get("hl-progress",{});
 let state = Object.assign({level:1, mode:"spell"}, store.get("hl-state",{}));
 const saveAll = ()=>{ store.set("hl-settings",settings); store.set("hl-progress",progress); store.set("hl-state",{level:state.level,mode:state.mode}); };
@@ -114,18 +123,19 @@ function pickVoice(){ const v=(window.speechSynthesis&&speechSynthesis.getVoices
   csVoice = v.find(x=>/^cs/i.test(x.lang) && /google/i.test(x.name)) || v.find(x=>/^cs/i.test(x.lang)) || null; }
 if(window.speechSynthesis){ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }
 function ttsSay(text){ return new Promise(res=>{
-  const u=new SpeechSynthesisUtterance(text); u.lang="cs-CZ"; u.voice=csVoice; u.rate=0.85;
+  const u=new SpeechSynthesisUtterance(text); u.lang="cs-CZ"; try{ u.voice=csVoice; }catch(e){} u.rate=0.85;
   let done=false; const fin=()=>{ if(done) return; done=true; talk(false); res(); };
   u.onend=fin; u.onerror=fin; setTimeout(fin, 4000);
   speechSynthesis.cancel(); talk(true); speechSynthesis.speak(u); }); }
-const useDevice = ()=> settings.voice!=="robot" && csVoice;
+const useDevice = ()=> settings.wordVoice!=="robot" && csVoice;
 
 async function play(key){
   if(!ctx) return;
   try{
   if(key.startsWith("p_")){ const b=REC[key.slice(2)]; if(b) return playBuf(b); return; }
-  if(key.startsWith("w_") && ownWords.has(key.slice(2))){ const b=await loadOwnWord(key.slice(2)); if(b) return playBuf(b); }
-  if(OWNV.has(key)){ const b=await load(key); if(b) return playBuf(b); }
+  const wv=settings.wordVoice;
+  if(wv==="own" && key.startsWith("w_") && ownWords.has(key.slice(2))){ const b=await loadOwnWord(key.slice(2)); if(b) return playBuf(b); }
+  if((wv==="own"||wv==="recorded") && OWNV.has(key)){ const b=await load(key); if(b) return playBuf(b); }
   if(useDevice()){
     const text = key.startsWith("w_") ? key.slice(2).toLowerCase() : PHR[key.slice(2)];
     if(text) return ttsSay(text);
@@ -184,10 +194,18 @@ async function loadOwnWord(W){
     WREC[W]=await decodeRec(blob,true); return WREC[W]; }
   catch(e){ diag("vlastní slovo "+W+": "+e.message); return null; }
 }
+/* REC = hlásky, které se právě používají; OWNP = moje nahrávky, DEFP = výchozí nahrávky aplikace */
+const OWNP={}, DEFP={};
+function applyPhoneVoice(){
+  for(const k of Object.keys(REC)) delete REC[k];
+  Object.assign(REC, DEFP, settings.phoneVoice==="own" ? OWNP : {});
+}
 async function loadRecs(){
-  try{ for(const [k] of PHONES){ const blob=await dbOp("readonly",s=>s.get(k)); if(blob){ const b=await decodeRec(blob); if(b) REC[k]=b; } } }catch(e){}
-  await Promise.all(PHONES.filter(([k])=>!REC[k] && AUDIO_KEYS.has("p_"+k))
-    .map(async([k])=>{ try{ REC[k]=await fetchAudio("p_"+k); }catch(e){} }));
+  try{ for(const [k] of PHONES){ const blob=await dbOp("readonly",s=>s.get(k)); if(blob){ const b=await decodeRec(blob); if(b) OWNP[k]=b; } } }
+  catch(e){ diag("načtení mých hlásek: "+e.message); }
+  await Promise.all(PHONES.filter(([k])=>AUDIO_KEYS.has("p_"+k))
+    .map(async([k])=>{ try{ DEFP[k]=await fetchAudio("p_"+k); }catch(e){} }));
+  applyPhoneVoice();
 }
 /* ---------- timer ---------- */
 let secs=300, tick=null, doneSaid=false;
@@ -328,7 +346,18 @@ function renderGrid(){
 }
 $("openList").onclick=()=>{ renderGrid(); $("dlgList").showModal(); };
 $("resetLv").onclick=()=>{ if(confirm("Smazat všechny kroužky v této úrovni?")){ progress[state.level]=[]; saveAll(); renderLevels(); renderGrid(); } };
-$("openSet").onclick=()=>{ $("voice").value=settings.voice; $("voiceNote").textContent=csVoice?"Hlas telefonu zní přirozeně":"Telefon nemá český hlas, používá se robot"; $("gap").value=settings.gap; $("assim").checked=settings.assim; $("letters").checked=settings.letters; $("lower").checked=settings.lower; $("dlgSet").showModal(); };
+function voiceNote(){
+  const wv=settings.wordVoice;
+  const dev = csVoice ? "Hlas telefonu: "+csVoice.name+"." : "Telefon nemá český hlas – použije se robot. Nastavení telefonu → Převod textu na řeč → Google → stáhnout češtinu.";
+  $("voiceNote").textContent = wv==="robot" ? "Robotický hlas z nahrávek aplikace." :
+    wv==="own" ? "Vaše namluvená slova (🎙), jinak nahrávky aplikace, jinak hlas telefonu. "+dev :
+    wv==="recorded" ? "Vaše namluvená slova se nepoužijí. "+dev : dev;
+  const own=PHONES.filter(([k])=>OWNP[k]).length;
+  $("phoneNote").textContent = settings.phoneVoice==="own"
+    ? (own ? `Používá se ${own} vašich hlásek, zbytek výchozí.` : "Zatím nemáte namluvené hlásky – používají se výchozí.")
+    : "Výchozí nahrávky aplikace"+(own?` (vašich ${own} hlásek zůstává uloženo).`:".");
+}
+$("openSet").onclick=()=>{ $("wordVoice").value=settings.wordVoice; $("phoneVoice").value=settings.phoneVoice; pickVoice(); voiceNote(); $("gap").value=settings.gap; $("assim").checked=settings.assim; $("letters").checked=settings.letters; $("lower").checked=settings.lower; $("dlgSet").showModal(); };
 $("gap").oninput=e=>{ settings.gap=+e.target.value; saveAll(); };
 ["assim","letters","lower"].forEach(k=>$(k).onchange=e=>{ settings[k]=e.target.checked; saveAll(); });
 $("dlgSet").addEventListener("close",()=>{ renderGrid(); render(); });
@@ -345,7 +374,7 @@ async function getMic(){
 function recMsg(t){ const m=$("recMsg"); m.hidden=!t; m.textContent=t||""; }
 function renderRec(){
   $("recGrid").replaceChildren(...PHONES.map(([k,ex])=>{
-    const b=h("button",{class:"rk"+(REC[k]?" has":""),"aria-label":`hláska ${k}, jako ${ex}`},h("b",{},cs(k)),h("span",{},ex));
+    const b=h("button",{class:"rk"+(OWNP[k]?" has":""),"aria-label":`hláska ${k}, jako ${ex}`},h("b",{},cs(k)),h("span",{},ex));
     b.addEventListener("click",async()=>{
       if(activeRec){ const same=activeRec.k===k; stopRec(); if(same) return; }
       recMsg("Připravuji mikrofon…");
@@ -362,8 +391,8 @@ function renderRec(){
       mr.onstop=async()=>{ b.classList.remove("rec");
         const blob=new Blob(chunks,{type:mr.mimeType||"audio/webm"});
         try{ const buf=await decodeRec(blob); if(!buf){ recMsg("Nic nebylo slyšet. Mluvte blíž k telefonu a zkuste to znovu."); return; }
-          REC[k]=buf; await dbOp("readwrite",st=>st.put(blob,k)); b.classList.add("has");
-          recMsg(`Uloženo: ${cs(k)}. Namluveno ${PHONES.filter(([q])=>REC[q]).length} z ${PHONES.length}.`); playBuf(buf); }
+          OWNP[k]=buf; await dbOp("readwrite",st=>st.put(blob,k)); b.classList.add("has"); applyPhoneVoice();
+          recMsg(`Uloženo: ${cs(k)}. Namluveno ${PHONES.filter(([q])=>OWNP[q]).length} z ${PHONES.length}.`+(settings.phoneVoice==="own"?"":" Pozor: v Nastavení jsou zapnuté výchozí hlásky, vaše se nepoužijí.")); playBuf(buf); }
         catch(err){ recMsg("Nahrávku se nepodařilo zpracovat, zkuste to znovu."); } };
       mr.start(); b.classList.add("rec"); recMsg(`Nahrávám ${cs(k)}… řekněte hlásku teď.`);
       activeRec={k,mr,timer:setTimeout(stopRec,1800)};
@@ -371,14 +400,16 @@ function renderRec(){
     b.addEventListener("contextmenu",e=>e.preventDefault());
     return b;
   }));
-  const n=PHONES.filter(([k])=>REC[k]).length;
-  if(!$("recMsg").textContent) recMsg(n?`Namluveno ${n} z ${PHONES.length} hlásek.`:"");
+  const n=PHONES.filter(([k])=>OWNP[k]).length;
+  if(!$("recMsg").textContent) recMsg((n?`Namluveno ${n} z ${PHONES.length} hlásek.`:"")+
+    (settings.phoneVoice==="own"?"":" V Nastavení jsou zapnuté výchozí hlásky – vaše nahrávky se teď nepoužívají."));
 }
 function openRec(){ recMsg(""); renderRec(); $("dlgRec").showModal(); }
 $("openRec").onclick=openRec;
 $("recTest").onclick=()=>spellOut(word||"NOS");
 $("dlgRec").addEventListener("close",()=>{ stopRec(); if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } ensureAudio().finally(render); });
-$("voice").onchange=e=>{ settings.voice=e.target.value; saveAll(); };
+$("wordVoice").onchange=e=>{ settings.wordVoice=e.target.value; saveAll(); voiceNote(); diag("hlas slov: "+settings.wordVoice); if(word){ playToken++; play("w_"+word); } };
+$("phoneVoice").onchange=e=>{ settings.phoneVoice=e.target.value; saveAll(); applyPhoneVoice(); voiceNote(); diag("hlas hlásek: "+settings.phoneVoice); if(word) spellOut(word); };
 
 /* ---------- namlouvání celého slova ---------- */
 let wrec=null;   // {W, mr, timer, blob, buf}
@@ -444,6 +475,7 @@ $("go").onclick=async()=>{
   await loadRecs(); await loadOwnWordList(); pickVoice();
   $("start").remove(); startTimer(); nextWord();
   if(!PHONES.some(([k])=>REC[k])) setTimeout(openRec,400);
+  pickVoice(); setTimeout(pickVoice,1500);   // Android načítá hlasy se zpožděním
 };
 renderLevels(); renderModes();
 
@@ -459,7 +491,8 @@ function renderDiag(){
     "Hláskoun – diagnostika "+new Date().toLocaleString("cs-CZ"),
     "Prohlížeč: "+navigator.userAgent,
     "Režim: "+(matchMedia("(display-mode: standalone)").matches?"aplikace na ploše":"prohlížeč"),
-    "Zvuk: "+(ctx?ctx.state:"nespuštěn")+", hlásek načteno: "+Object.keys(REC).length+"/"+PHONES.length,
+    "Zvuk: "+(ctx?ctx.state:"nespuštěn")+", hlásek načteno: "+Object.keys(REC).length+"/"+PHONES.length+" (mých "+Object.keys(OWNP).length+")",
+    "Hlas slov: "+settings.wordVoice+", hlas hlásek: "+settings.phoneVoice,
     "Vlastní nahrávky slov: "+ownWords.size+(ownWords.size?" ("+[...ownWords].slice(0,30).join(", ")+")":""),
     "Hlas telefonu: "+(csVoice?csVoice.name:"žádný český"),
     "Service worker: "+(navigator.serviceWorker&&navigator.serviceWorker.controller?"aktivní":"ne"),
