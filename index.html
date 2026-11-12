@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EAF3F1">
+<title>Robot Hláskoun</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="start" id="start">
+  <div class="box">
+    <div class="robot" aria-hidden="true"><div class="antenna"></div><div class="ears"></div>
+      <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
+      <div class="mouth"><i></i><i></i><i></i><i></i><i></i></div></div>
+    <h2>Robot Hláskoun</h2>
+    <p>Hláskuje slova vaším hlasem: na začátku jednou namluvíte hlásky (asi 2 minuty). Celá slova čte hlas telefonu. Cvičte asi 5 minut denně.</p>
+    <button class="btn main" id="go">Začít cvičit</button>
+  </div>
+</div>
+
+<div class="app">
+  <header>
+    <h1>Hláskoun</h1>
+    <span class="timer" id="timer" title="Doporučeno asi 5 minut denně">5:00</span>
+    <button class="iconbtn" id="openRec" aria-label="Namluvit hlásky">🎙</button>
+    <button class="iconbtn" id="openList" aria-label="Seznam slov úrovně">☰</button>
+    <button class="iconbtn" id="openSet" aria-label="Nastavení">⚙</button>
+  </header>
+  <nav class="levels" id="levels" aria-label="Úroveň"></nav>
+  <p class="lvnote" id="lvnote"></p>
+  <nav class="modes" id="modes" aria-label="Cvičení"></nav>
+
+  <div class="robot" id="robot" aria-live="polite">
+    <div class="antenna"></div><div class="ears"></div>
+    <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
+    <div class="screen" id="screen"></div>
+    <div class="mouth" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+  <section class="panel" id="panel"></section>
+</div>
+<div class="actions"><div class="in" id="actions"></div></div>
+
+<dialog id="dlgList"><div class="dlg">
+  <h2 id="listTitle">Úroveň</h2>
+  <p>Zakroužkovaná slova dítě složilo nebo přečetlo. Klepnutím slovo zakroužkujete nebo kroužek zrušíte.</p>
+  <div class="grid" id="grid"></div>
+  <div class="row"><button class="btn" id="resetLv">Smazat kroužky</button><button class="btn main" data-close>Zavřít</button></div>
+</div></dialog>
+
+<dialog id="dlgRec"><div class="dlg">
+  <h2>Namluvte hlásky</h2>
+  <p>Ťukněte na hlásku a řekněte ji. Nahrávání se samo zastaví a hlásku vám přehraje. Jen hlásku, bez samohlásky: „sss“, ne „es“, „mmm“, ne „em“. U p, t, k, b, d jen krátký ráz. Hlásky se uloží v tomto telefonu.</p>
+  <p id="recMsg" class="recmsg" hidden></p>
+  <div class="recgrid" id="recGrid"></div>
+  <div class="row"><button class="btn" id="recTest">▶ Zkusit slovo</button><button class="btn main" data-close>Hotovo</button></div>
+</div></dialog>
+
+<dialog id="dlgSet"><div class="dlg">
+  <h2>Nastavení</h2>
+  <div class="set"><label for="voice">Hlas pro celá slova<small id="voiceNote">Hlas telefonu zní přirozeně</small></label>
+    <select id="voice"><option value="device">Hlas telefonu</option><option value="robot">Robot</option></select></div>
+  <div class="set"><label for="gap">Tempo hláskování<small>Pauza mezi hláskami</small></label><input type="range" id="gap" min="150" max="1200" step="50"></div>
+  <div class="set"><label for="assim">Hláskovat podle výslovnosti<small>věž → v-j-e-š, včela → f-č-e-l-a</small></label><input type="checkbox" id="assim"></div>
+  <div class="set"><label for="letters">Ukazovat písmena při hláskování<small>Vypnuto: dítě jen poslouchá</small></label><input type="checkbox" id="letters"></div>
+  <div class="set"><label for="lower">Malá písmena<small>Místo velkých tiskacích</small></label><input type="checkbox" id="lower"></div>
+  <div class="row"><button class="btn main" data-close>Hotovo</button></div>
+</div></dialog>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
