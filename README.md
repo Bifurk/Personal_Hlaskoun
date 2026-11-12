@@ -37,6 +37,14 @@ python3 -m http.server 8000
 
 a otevřít <http://localhost:8000>. Nahrávání mikrofonem funguje jen na `localhost` nebo přes HTTPS.
 
+## Test na Samsungu Galaxy S23
+
+```bash
+node tests/s23.js
+```
+
+Otestuje aplikaci na emulovaném Galaxy S23 v Chromu i Samsung Internetu (načtení, zvuky, instalace na plochu, všechny režimy, rozložení na šířku telefonu). S adresou jako parametrem otestuje nasazenou verzi. Snímky obrazovky jsou v `tests/screenshots/`.
+
 ## Nasazení na GitHub Pages
 
 V repozitáři *Settings → Pages → Build and deployment*: Source *Deploy from a branch*, větev `main`, složka `/ (root)`. Aplikace pak poběží na `https://<účet>.github.io/<repozitář>/`.
