@@ -1,7 +1,7 @@
 // Service worker: umožní instalaci na plochu a běh bez internetu.
 // Stránka a kód se berou nejdřív ze sítě (aby se projevily aktualizace),
 // nahrávky a ikony nejdřív z mezipaměti.
-const CACHE = "hlaskoun-v2";
+const CACHE = "hlaskoun-v3";
 const SHELL = ["./", "index.html", "css/style.css", "js/data.js", "js/app.js", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", e => {

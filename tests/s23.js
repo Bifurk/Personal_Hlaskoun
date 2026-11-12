@@ -85,6 +85,17 @@ function serve() {
       await shot(`${i + 2}-${modes[i].replace(/\s/g, "-")}`);
     }
 
+    // Tlačítka v dialogu musí být celá vidět bez posouvání (chyba z 13. 11.: „Hotovo“ bylo useknuté pod okrajem)
+    const dialogButtonsVisible = (sel) => page.evaluate(sel => {
+      const d = document.querySelector(sel), r = d.getBoundingClientRect();
+      const btns = [...d.querySelectorAll(".row button")];
+      const bad = btns.filter(b => { const q = b.getBoundingClientRect();
+        return q.height === 0 || q.top < Math.max(0, r.top) - 1 || q.bottom > Math.min(innerHeight, r.bottom) + 1; });
+      return { ok: btns.length > 0 && bad.length === 0, bad: bad.map(b => b.textContent.trim()).join(", "), dialogScroll: d.scrollHeight - d.clientHeight };
+    }, sel).then(r => r);
+    const checkDialog = async (name, sel) => { const r = await dialogButtonsVisible(sel);
+      check(`${name}: tlačítka celá vidět`, r.ok, r.bad); check(`${name}: dialog se neposouvá jako celek`, r.dialogScroll <= 1, `${r.dialogScroll}px`); };
+
     // --- Namlouvání hlásek a odolnost zvuku (chyba z 12. 11.: po namluvení hlásek nic nefungovalo) ---
     await page.locator("#modes .mode").nth(0).tap();
     await page.tap("#openRec");
@@ -93,7 +104,14 @@ function serve() {
     for (let i = 0; i < 6; i++) { await page.locator(".rk").nth(i).tap(); await page.waitForTimeout(2300); }
     const recMsg = await page.textContent("#recMsg");
     check("nahrání hlásky mikrofonem", /Uloženo/.test(recMsg), recMsg);
+    await checkDialog("namlouvání hlásek", "#dlgRec");
+    await page.locator(".recgrid").evaluate(g => g.scrollTop = g.scrollHeight);  // posunout na poslední hlásky
+    await checkDialog("namlouvání hlásek po posunutí na konec", "#dlgRec");
     await shot("6-namlouvani");
+    const hotovo = page.locator("#dlgRec .row .main");
+    check("Hotovo jde stisknout bez posouvání", await hotovo.isVisible() && await hotovo.evaluate(b => {
+      const q = b.getBoundingClientRect(); const el = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2);
+      return b.contains(el); }));
     await page.tap("#dlgRec [data-close]");
     await page.waitForTimeout(600);
     check("po zavření namlouvání zvuk běží", await page.evaluate(() => ctx.state === "running"));
@@ -150,7 +168,14 @@ function serve() {
     await notHung("hláskování po znovuotevření a uspání", () => spellOut(word));
 
     // Diagnostika
-    await page.tap("#openSet"); await page.tap("#openDiag");
+    await page.tap("#openList"); await page.waitForSelector("#dlgList[open]");
+    await checkDialog("seznam slov", "#dlgList");
+    await shot("8-seznam-slov");
+    await page.tap("#dlgList .row .main");
+    await page.tap("#openSet"); await page.waitForSelector("#dlgSet[open]");
+    await checkDialog("nastavení", "#dlgSet");
+    await page.tap("#openDiag");
+    await checkDialog("diagnostika", "#dlgDiag");
     const diagTxt = await page.inputValue("#diagText");
     check("diagnostika se otevře a ukáže stav", /Zvuk: running/.test(diagTxt) && /audio:/.test(diagTxt));
     await shot("7-diagnostika");
