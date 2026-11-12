@@ -1,3 +1,12 @@
+/* ---------- záznam chyb pro diagnostiku (Nastavení → Diagnostika) ---------- */
+const DIAG = (()=>{ try{ return JSON.parse(localStorage.getItem("hl-diag"))||[]; }catch(e){ return []; } })();
+function diag(msg){
+  DIAG.push(new Date().toTimeString().slice(0,8)+" "+msg);
+  if(DIAG.length>200) DIAG.splice(0,DIAG.length-200);
+  try{ localStorage.setItem("hl-diag",JSON.stringify(DIAG)); }catch(e){}
+}
+addEventListener("error",e=>diag("CHYBA: "+e.message+" @"+(e.filename||"").split("/").pop()+":"+e.lineno));
+addEventListener("unhandledrejection",e=>diag("CHYBA (promise): "+((e.reason&&(e.reason.message||e.reason.name))||e.reason)));
 const MODES = [
   {id:"spell", icon:"🤖", label:"Slož slovo"},
   {id:"guess", icon:"👂", label:"Najdi hlásku"},
@@ -68,8 +77,36 @@ async function load(key){
 }
 let playToken=0, talkers=0;
 function talk(on){ talkers=Math.max(0,talkers+(on?1:-1)); robot.classList.toggle("talking",talkers>0); }
-function playBuf(b){ return new Promise(res=>{ const s=ctx.createBufferSource(); s.buffer=b; s.connect(ctx.destination);
-  talk(true); s.onended=()=>{ talk(false); res(); }; s.start(); }); }
+/* Android (Samsung) pozastaví AudioContext po použití mikrofonu, při odchodu na pozadí
+   nebo při telefonátu. Pozastavený kontext nikdy nezavolá onended, takže by se aplikace zasekla.
+   Proto: před každým přehráním kontext probudit (případně vytvořit nový) a přehrávání
+   vždy ukončit nejpozději po délce nahrávky. AudioBuffer jde přehrát v libovolném kontextu. */
+const AC = window.AudioContext||window.webkitAudioContext;
+const withTimeout = (pr, ms) => Promise.race([pr, new Promise(r=>setTimeout(r, ms))]);
+async function ensureAudio(){
+  if(!ctx || ctx.state==="closed"){ ctx=new AC(); diag("audio: nový AudioContext"); }
+  if(ctx.state!=="running"){
+    const was=ctx.state;
+    try{ await withTimeout(ctx.resume(), 800); }catch(e){}
+    if(ctx.state!=="running"){
+      diag("audio: kontext zůstal "+ctx.state+" (byl "+was+"), vytvářím nový");
+      try{ ctx.close(); }catch(e){}
+      ctx=new AC();
+      try{ await withTimeout(ctx.resume(), 800); }catch(e){}
+    } else diag("audio: probuzen z "+was);
+  }
+  return ctx.state==="running";
+}
+function playBuf(b){ return new Promise(async res=>{
+  let done=false; const fin=()=>{ if(done) return; done=true; talk(false); res(); };
+  talk(true);
+  try{
+    await ensureAudio();
+    const s=ctx.createBufferSource(); s.buffer=b; s.connect(ctx.destination);
+    s.onended=fin; s.start();
+  }catch(e){ diag("audio: přehrání selhalo – "+e.message); }
+  setTimeout(fin, b.duration*1000+400);   // pojistka: nikdy nečekat déle než nahrávka
+}); }
 
 /* device voice (Google TTS on Android) for whole words */
 let csVoice=null;
@@ -85,6 +122,7 @@ const useDevice = ()=> settings.voice!=="robot" && csVoice;
 
 async function play(key){
   if(!ctx) return;
+  try{
   if(key.startsWith("p_")){ const b=REC[key.slice(2)]; if(b) return playBuf(b); return; }
   if(OWNV.has(key)){ const b=await load(key); if(b) return playBuf(b); }
   if(useDevice()){
@@ -92,6 +130,7 @@ async function play(key){
     if(text) return ttsSay(text);
   }
   const b = await load(key); if(b) return playBuf(b);
+  }catch(e){ diag("play "+key+": "+e.message); }
 }
 const PHR={ok1:"správně!",ok2:"výborně!",ok3:"super!",no:"zkus to znovu",done:"hotovo, dneska stačí"};
 const wait = ms => new Promise(r=>setTimeout(r,ms));
@@ -316,18 +355,44 @@ function renderRec(){
 function openRec(){ recMsg(""); renderRec(); $("dlgRec").showModal(); }
 $("openRec").onclick=openRec;
 $("recTest").onclick=()=>spellOut(word||"NOS");
-$("dlgRec").addEventListener("close",()=>{ stopRec(); if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } render(); });
+$("dlgRec").addEventListener("close",()=>{ stopRec(); if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } ensureAudio().finally(render); });
 $("voice").onchange=e=>{ settings.voice=e.target.value; saveAll(); };
 
 /* ---------- start ---------- */
 $("go").onclick=async()=>{
-  const AC=window.AudioContext||window.webkitAudioContext;
-  ctx=new AC(); if(ctx.state==="suspended") await ctx.resume();
+  await ensureAudio();
   await loadRecs(); pickVoice();
   $("start").remove(); startTimer(); nextWord();
   if(!PHONES.some(([k])=>REC[k])) setTimeout(openRec,400);
 };
 renderLevels(); renderModes();
+
+/* zvuk probudit po návratu do aplikace a při každém dotyku (Android vyžaduje gesto) */
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden && ctx) ensureAudio(); });
+addEventListener("pageshow",()=>{ if(ctx) ensureAudio(); });
+document.addEventListener("pointerdown",()=>{ if(ctx && ctx.state!=="running") ensureAudio(); },{capture:true});
+
+/* ---------- diagnostika ---------- */
+$("openDiag").onclick=()=>{ $("dlgSet").close(); renderDiag(); $("dlgDiag").showModal(); };
+function renderDiag(){
+  const info=[
+    "Hláskoun – diagnostika "+new Date().toLocaleString("cs-CZ"),
+    "Prohlížeč: "+navigator.userAgent,
+    "Režim: "+(matchMedia("(display-mode: standalone)").matches?"aplikace na ploše":"prohlížeč"),
+    "Zvuk: "+(ctx?ctx.state:"nespuštěn")+", hlásek načteno: "+Object.keys(REC).length+"/"+PHONES.length,
+    "Hlas telefonu: "+(csVoice?csVoice.name:"žádný český"),
+    "Service worker: "+(navigator.serviceWorker&&navigator.serviceWorker.controller?"aktivní":"ne"),
+    "Úroveň/režim/slovo: "+state.level+" / "+state.mode+" / "+word,
+    "--- záznam ---", ...DIAG.slice(-60)];
+  $("diagText").value=info.join("\n");
+}
+$("diagCopy").onclick=async()=>{
+  const t=$("diagText"); t.select();
+  try{ await navigator.clipboard.writeText(t.value); $("diagCopy").textContent="✓ Zkopírováno"; }
+  catch(e){ document.execCommand("copy"); $("diagCopy").textContent="✓ Zkopírováno"; }
+  setTimeout(()=>$("diagCopy").textContent="📋 Zkopírovat",2000);
+};
+$("diagClear").onclick=()=>{ DIAG.length=0; store.set("hl-diag",DIAG); renderDiag(); };
 
 /* ---------- install to home screen ---------- */
 if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});

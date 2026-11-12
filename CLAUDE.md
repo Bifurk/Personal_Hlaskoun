@@ -15,6 +15,11 @@ Každou změnu je nutné otestovat na emulaci tohoto telefonu:
 Test musí skončit „Vše v pořádku“. Když nová funkce přidá něco ověřitelného (režim, tlačítko, dialog), doplnit kontrolu do `tests/s23.js`.
 Jde o emulaci v Chromiu, ne o skutečný telefon – u věcí, které emulace neověří (mikrofon, hlas telefonu, skutečná instalace na plochu), to uživateli říct a požádat ho o vyzkoušení.
 
+## Známé pasti na Androidu
+
+- Android/Samsung **uspí AudioContext** po použití mikrofonu, při odchodu na pozadí nebo hovoru. Uspaný kontext nikdy nezavolá `onended` → aplikace zamrzne. Veškeré přehrávání proto jde přes `playBuf()`/`ensureAudio()` (probuzení, případně nový kontext, pojistný timeout). Nikdy nepřehrávat zvuk mimo ně. `tests/s23.js` to kontroluje.
+- Když uživatel hlásí problém z telefonu: požádat ho o text z **Nastavení → Diagnostika → Zkopírovat**.
+
 ## Poznámky
 
 - Uživatel komunikuje česky; texty v aplikaci jsou česky.

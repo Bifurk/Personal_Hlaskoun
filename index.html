@@ -74,7 +74,16 @@
   <div class="set"><label for="assim">Hláskovat podle výslovnosti<small>věž → v-j-e-š, včela → f-č-e-l-a</small></label><input type="checkbox" id="assim"></div>
   <div class="set"><label for="letters">Ukazovat písmena při hláskování<small>Vypnuto: dítě jen poslouchá</small></label><input type="checkbox" id="letters"></div>
   <div class="set"><label for="lower">Malá písmena<small>Místo velkých tiskacích</small></label><input type="checkbox" id="lower"></div>
+  <div class="set"><label>Diagnostika<small>Když něco nefunguje, pošlete záznam vývojáři</small></label><button class="btn" id="openDiag" style="flex:0 0 auto;min-height:44px;padding:4px 14px">Otevřít</button></div>
   <div class="row"><button class="btn main" data-close>Hotovo</button></div>
+</div></dialog>
+
+<dialog id="dlgDiag"><div class="dlg">
+  <h2>Diagnostika</h2>
+  <p>Zkopírujte text a pošlete ho do chatu s Claudem. Neobsahuje nahrávky ani osobní údaje.</p>
+  <textarea id="diagText" readonly rows="12"></textarea>
+  <div class="row"><button class="btn" id="diagClear">Smazat záznam</button><button class="btn main" id="diagCopy">📋 Zkopírovat</button></div>
+  <div class="row"><button class="btn" data-close>Zavřít</button></div>
 </div></dialog>
 
 <script src="js/data.js"></script>
