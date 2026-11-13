@@ -237,3 +237,12 @@ input[type=checkbox] { width: 26px; height: 26px; accent-color: var(--robot); fl
 #game .hero-pic.small { width: min(140px, 36vw); font-size: clamp(4rem, 19vw, 5.2rem); }
 #game .tile { width: 40px; height: 40px; }
 @media (max-height: 680px) { #game .robot { width: 100px; } #game .hero-pic { width: 130px; font-size: 4.6rem; } #game .hero-pic.small { width: 110px; font-size: 3.8rem; } }
+/* Skládej s dlouhým slovem: menší robot a obrázek, menší klávesy – vše se musí vejít bez posouvání */
+body.long-word #game .robot { width: 84px; }
+body.long-word #game .hero-pic.small { width: 104px; font-size: 3.6rem; }
+body.long-word .key { min-width: 52px; height: 58px; font-size: 1.75rem; padding: 0 6px; }
+body.long-word .bank { gap: 8px; }
+@media (max-height: 680px) {
+  body.long-word #game .robot { display: none; }
+  body.long-word .word-row .ltr { min-width: 32px; height: 46px; font-size: 1.5rem; }
+}

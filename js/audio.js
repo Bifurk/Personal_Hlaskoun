@@ -59,11 +59,12 @@ export async function fetchAudio(key) {
   await ensureAudio();
   return ctx.decodeAudioData(await r.arrayBuffer());
 }
+const loading = {};   // běžící stahování – stejná nahrávka se nestahuje dvakrát
 export async function load(key) {
   if (buf[key]) return buf[key];
   if (!AUDIO_KEYS.has(key)) return null;
-  try { buf[key] = await fetchAudio(key); } catch (e) { return null; }
-  return buf[key];
+  if (!loading[key]) loading[key] = fetchAudio(key).then(b => (buf[key] = b), () => null).finally(() => delete loading[key]);
+  return loading[key];
 }
 
 /* ---------- hlas telefonu ---------- */

@@ -96,17 +96,19 @@ function renderGames() {
   $("starTotal").textContent = progress.stars;
 }
 
-let started = false;
-async function unlock() {           // první dotyk: odemknout zvuk a načíst nahrávky
-  if (started) return; started = true;
-  await ensureAudio();
-  await audio.loadRecs(); await audio.loadOwnWordList(); audio.pickVoice(); setTimeout(audio.pickVoice, 1500);
+let unlockDone = null;
+function unlock() {                // první dotyk: odemknout zvuk a načíst nahrávky (jen jednou)
+  if (!unlockDone) unlockDone = (async () => {
+    await ensureAudio();
+    await audio.loadRecs(); await audio.loadOwnWordList(); audio.pickVoice(); setTimeout(audio.pickVoice, 1500);
+  })();
+  return unlockDone;
 }
 
-export async function startGame(g) {
+export async function startGame(g, words = null) {   // words: jen pro testy (konkrétní slova)
   stopAll();
   await unlock();
-  Object.assign(R, { game: g, words: chooseWords(g), i: 0, results: [], mistakes: 0 });
+  Object.assign(R, { game: g, words: words || chooseWords(g), i: 0, results: [], mistakes: 0 });
   document.body.dataset.game = GAMES[g].color;
   diag("hra " + g + " úroveň " + tierOf(g) + ": " + R.words.join(" "));
   show("game");
@@ -122,6 +124,7 @@ function renderDots() {
 }
 
 function nextWord(first = false) {
+  document.body.classList.remove("long-word");
   if (R.i >= R.words.length) return finishRound();
   R.word = R.words[R.i]; R.mistakes = 0; R.busy = false;
   mood(); renderDots();
@@ -166,7 +169,7 @@ function gListen(W, first) {
   R.onAgain = go;
   $("answers").replaceChildren(h("div", { class: "pics" }, pictureOptions(W).map(w =>
     picCard(w, e => { if (R.busy) return; w === W ? correct(e.currentTarget) : wrong(e.currentTarget, () => sayWord(w)); }))),
-    first ? hand() : null);
+    ...(first ? [hand()] : []).filter(Boolean));
   setTimeout(go, 300);
 }
 
@@ -186,7 +189,7 @@ function gFirst(W, first) {
       const el = e.currentTarget; if (R.busy) return;
       if (x === L) { R.busy = true; el.classList.add("ok"); firstSlot.textContent = cs(x); firstSlot.classList.add("filled"); rest.forEach(r => r.classList.remove("dim")); sayPhone(letterSound(x)).then(() => { R.busy = false; correct(el); }); }
       else wrong(el, () => sayPhone(letterSound(x)));
-    } }, cs(x)))), first ? hand() : null);
+    } }, cs(x)))), ...(first ? [hand()] : []).filter(Boolean));
   setTimeout(() => sayWord(W), 300);
 }
 
@@ -196,6 +199,7 @@ function gBuild(W, first) {
   const extra = shuffle(ALL_LETTERS.filter(x => !L.includes(x))).slice(0, L.length <= 4 ? 2 : 3);
   const bank = shuffle([...L.map((l, i) => ({ l, i })), ...extra.map((l, i) => ({ l, i: 100 + i }))]);
   const slots = L.map(() => h("span", { class: "ltr slot" }));
+  document.body.classList.toggle("long-word", L.length + extra.length > 8);   // hodně písmen: menší robot a klávesy
   let pos = 0, missHere = 0;
   $("prompt").replaceChildren(
     PICS[W] ? h("button", { class: "pic hero-pic small", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, h("span", {}, PICS[W]))
@@ -218,7 +222,7 @@ function gBuild(W, first) {
       if (missHere >= 2) keys.find(q => !q.disabled && bank[keys.indexOf(q)].l === L[pos])?.classList.add("hint");
     }
   } }, cs(b.l)));
-  $("answers").replaceChildren(h("div", { class: "bank" }, keys), first ? hand() : null);
+  $("answers").replaceChildren(h("div", { class: "bank" }, keys), ...(first ? [hand()] : []).filter(Boolean));
   setTimeout(() => sayWord(W), 300);
 }
 
@@ -230,7 +234,7 @@ function gRead(W, first) {
     picCard(w, e => { const el = e.currentTarget; if (R.busy) return;
       if (w === W) { R.busy = true; el.classList.add("ok"); sayWord(W).then(() => { R.busy = false; correct(el); }); }
       else wrong(el, () => sayWord(w)); }))),
-    first ? hand() : null);
+    ...(first ? [hand()] : []).filter(Boolean));
 }
 
 async function finishRound() {
@@ -286,8 +290,8 @@ $("robotHome").addEventListener("click", async () => { await unlock(); sayText("
   btn.addEventListener("contextmenu", e => e.preventDefault());
   btn.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") openParent(); });
 })();
-export async function openParent() {
-  stopAll(); await unlock();
+export function openParent() {
+  stopAll(); unlock();             // nahrávky se načítají na pozadí – okno se otevře hned
   renderProgress(); $("dlgParent").showModal();
 }
 function renderProgress() {
@@ -300,7 +304,7 @@ function renderProgress() {
       h("button", { class: "mini", "aria-label": G.label + " těžší", onclick: () => { progress.tier[id] = Math.min(G.tiers.length - 1, tierOf(id) + 1); saveProgress(); renderProgress(); renderGames(); } }, "+"))));
 }
 $("pRec").onclick = openRec;
-$("pWords").onclick = () => { renderWords(); $("dlgWords").showModal(); };
+$("pWords").onclick = async () => { renderWords(); $("dlgWords").showModal(); await unlock(); renderWords(); };
 $("pSet").onclick = openSet;
 $("pDiag").onclick = () => { renderDiag(); $("dlgDiag").showModal(); };
 
@@ -331,7 +335,7 @@ function renderRec() {
   const n = audio.PHONES.filter(([k]) => audio.OWNP[k]).length;
   recMsg((n ? `Namluveno ${n} z ${audio.PHONES.length} hlásek.` : "") + (settings.phoneVoice === "own" ? "" : " V Nastavení jsou zapnuté výchozí hlásky – vaše se teď nepoužívají."));
 }
-export function openRec() { recMsg(""); renderRec(); $("dlgRec").showModal(); }
+export async function openRec() { recMsg(""); renderRec(); $("dlgRec").showModal(); await unlockDone; renderRec(); }
 $("recTest").onclick = () => spellOut(R.word || "NOS");
 $("dlgRec").addEventListener("close", () => { if (activeRec) activeRec.r.stop(); activeRec = null; audio.releaseMic(); });
 

@@ -256,19 +256,21 @@ function serve() {
           const cut = [...scr.querySelectorAll("button")].filter(b => { const q = b.getBoundingClientRect();
             return q.width > 0 && (q.left < -1 || q.right > innerWidth + 1 || q.bottom > innerHeight + 1 || q.top < -1); });
           return { cut: cut.map(b => (b.getAttribute("aria-label") || b.textContent).trim().slice(0, 15)), hs: document.documentElement.scrollWidth <= innerWidth,
-            vs: document.documentElement.scrollHeight <= innerHeight + 1 };
+            vs: document.documentElement.scrollHeight <= innerHeight + 1, junk: (scr.innerText.match(/null|undefined|NaN|\[object/g) || []).join(",") };
         });
         check(`${w}×${hgt} ${name}: vše vidět bez posouvání`, m.cut.length === 0 && m.hs && m.vs, m.cut.join(", ") + (m.vs ? "" : " (posouvá se)"));
+        check(`${w}×${hgt} ${name}: žádný technický text (null, undefined…)`, !m.junk, m.junk);
       };
       await ev(() => hl.show("home")); await page.waitForTimeout(400); await screenCheck("domů");
       if (w === 320 || hgt === 600) await shot(`main-${w}x${hgt}-domu`);
       for (const g of GAME_IDS) {
-        // nejdelší slova hry (nejtěžší úroveň) – nejhorší případ pro rozložení
-        await ev(g => { hl.core.progress.tier[g] = 99; }, g);
-        await ev(g => hl.startGame(g), g); await page.waitForFunction(() => hl.current === "game" && hl.R.word); await page.waitForTimeout(500);
-        await screenCheck(`hra ${g} (těžká)`);
+        // nejhorší případ pro rozložení: nejdelší slovo, které hra může dát (napříč všemi úrovněmi)
+        const longest = await ev(g => { const G = hl.GAMES[g]; const all = [...new Set(G.tiers.flatMap(t => G.pool(t)))];
+          return all.sort((a, b) => b.length - a.length)[0]; }, g);
+        await ev(([g, n]) => { hl.core.progress.played = { ...(hl.core.progress.played || {}), [g]: n }; }, [g, (w + hgt) % 2 ? 0 : 5]);  // s ručičkou i bez
+        await ev(([g, W]) => hl.startGame(g, [W, W, W, W, W]), [g, longest]); await page.waitForFunction(() => hl.current === "game" && hl.R.word); await page.waitForTimeout(500);
+        await screenCheck(`hra ${g} (nejdelší slovo ${longest})`);
         if (w === 320 || hgt === 600) await shot(`main-${w}x${hgt}-${g}`);
-        await ev(g => { hl.core.progress.tier[g] = 0; }, g);
       }
       await ev(() => hl.show("done")); await page.waitForTimeout(400); await screenCheck("oslava");
       await ev(() => hl.audio.stopAll());
