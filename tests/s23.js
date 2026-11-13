@@ -222,8 +222,22 @@ function serve() {
       check(`hlas slov „${v}“: moje namluvené slovo → ${a}`, mine ? a === mine : a !== "moje" && (v !== "robot" || a !== "telefon"));
       check(`hlas slov „${v}“: slovo s nahrávkou aplikace → ${b}`, app ? b === app : ["robot", "aplikace"].includes(b));
     }
+    // pochvaly a „zkus to znovu“ mluví stejným hlasem jako slova
+    const phraseSrc = fn => ev(async fn => { let src = "nic";
+      hl.audio.hooks.playBuf = () => { src = "nahrávka"; }; hl.audio.hooks.tts = t => { src = "telefon:" + t; };
+      await hl.audio[fn](); hl.audio.hooks.playBuf = hl.audio.hooks.tts = null; return src; }, fn);
+    for (const v of ["own", "recorded", "device", "robot"]) {
+      await page.selectOption("#wordVoice", v); await page.waitForTimeout(100);
+      await ev(() => hl.audio._setVoice({ name: "Google čeština (test)", lang: "cs-CZ" }));
+      const p1 = await phraseSrc("praise"), p2 = await phraseSrc("oops");
+      const want = v === "device" ? /^telefon:/ : /^nahrávka$/;
+      check(`hlas „${v}“: pochvala → ${p1}`, want.test(p1));
+      check(`hlas „${v}“: zkus to znovu → ${p2}`, want.test(p2));
+    }
     await page.selectOption("#wordVoice", "device");
     await ev(() => { hl.audio._setVoice({ name: "Google čeština (test)", lang: "cs-CZ" }); document.querySelector("#wordVoice").dispatchEvent(new Event("change")); });
+    const praises = new Set(); for (let k = 0; k < 12; k++) praises.add(await phraseSrc("praise"));
+    check("hlas telefonu: pochvaly se střídají", praises.size >= 3, [...praises].join(" "));
     check("popis hlasu ukazuje hlas telefonu", /Google čeština/.test(await page.textContent("#voiceNote")));
     const ph = await ev(() => Object.keys(hl.audio.OWNP)[0]);
     await page.selectOption("#phoneVoice", "default"); await page.waitForTimeout(150);

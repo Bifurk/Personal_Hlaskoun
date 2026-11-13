@@ -192,14 +192,23 @@ export async function spellOut(W, onStep) {
   return my === token;
 }
 
-const PHR = { ok1: "správně!", ok2: "výborně!", ok3: "super!", no: "zkus to znovu" };
-async function phrase(k) {
+/* Pochvaly a „zkus to znovu“ mluví stejným hlasem jako celá slova:
+   „Vždy hlas telefonu“ → hlas telefonu (víc různých vět), jinak nahrávky aplikace (bez nich hlas telefonu). */
+const PRAISE_TTS = ["Správně!", "Výborně!", "Super!", "Bravo!", "Skvělé!", "To je ono!", "Paráda!", "Šikula!"];
+const OOPS_TTS = ["Zkus to znovu.", "Ještě jednou.", "Zkus to ještě jednou."];
+const PHR = { ok1: "Správně!", ok2: "Výborně!", ok3: "Super!", no: "Zkus to znovu." };
+let lastPraise = "";
+async function phrase(k, ttsChoices) {
   if (!settings.sound) return;
+  if (settings.wordVoice === "device" && csVoice) {
+    let t; do { t = ttsChoices[Math.floor(Math.random() * ttsChoices.length)]; } while (t === lastPraise && ttsChoices.length > 1);
+    lastPraise = t; return ttsSay(t, 0.95);
+  }
   const b = await load("x_" + k); if (b) return playBuf(b);
-  if (canTts()) return ttsSay(PHR[k]);
+  if (canTts()) return ttsSay(PHR[k], 0.95);
 }
-export const praise = () => phrase("ok" + (1 + Math.floor(Math.random() * 3)));
-export const oops = () => phrase("no");
+export const praise = () => phrase("ok" + (1 + Math.floor(Math.random() * 3)), PRAISE_TTS);
+export const oops = () => phrase("no", OOPS_TTS);
 
 /* ---------- mikrofon ---------- */
 let stream = null;
