@@ -1,530 +1,446 @@
-/* ---------- záznam chyb pro diagnostiku (Nastavení → Diagnostika) ---------- */
-const DIAG = (()=>{ try{ return JSON.parse(localStorage.getItem("hl-diag"))||[]; }catch(e){ return []; } })();
-function diag(msg){
-  DIAG.push(new Date().toTimeString().slice(0,8)+" "+msg);
-  if(DIAG.length>200) DIAG.splice(0,DIAG.length-200);
-  try{ localStorage.setItem("hl-diag",JSON.stringify(DIAG)); }catch(e){}
-}
-addEventListener("error",e=>diag("CHYBA: "+e.message+" @"+(e.filename||"").split("/").pop()+":"+e.lineno));
-addEventListener("unhandledrejection",e=>diag("CHYBA (promise): "+((e.reason&&(e.reason.message||e.reason.name))||e.reason)));
-const MODES = [
-  {id:"spell", icon:"🤖", label:"Slož slovo"},
-  {id:"guess", icon:"👂", label:"Najdi hlásku"},
-  {id:"write", icon:"✏️", label:"Napiš"},
-  {id:"read",  icon:"📖", label:"Přečti"}];
+// Robot Hláskoun – hry pro dítě (6–7 let), které hraje samo, a koutek pro rodiče.
+import * as core from "./core.js";
+import { settings, saveSettings, progress, saveProgress, diag, DIAG, store, shuffle, pick, wait, cs } from "./core.js";
+import { spell, letters, letterSound } from "./phonetics.js";
+import * as audio from "./audio.js";
+import { sayWord, sayPhone, sayText, spellOut, praise, oops, stopAll, ensureAudio } from "./audio.js";
 
-/* ---------- storage ---------- */
-const store = {
-  get(k,d){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } },
-  set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+const $ = id => document.getElementById(id);
+function h(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (k === "class") e.className = v; else if (v != null && v !== false) e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+}
+const vibrate = p => { if (settings.vibrate && navigator.vibrate) try { navigator.vibrate(p); } catch (e) {} };
+
+/* ---------- robot (SVG) ---------- */
+const ROBOT_SVG = `<svg viewBox="0 0 200 170" class="robot-svg">
+  <line x1="100" y1="10" x2="100" y2="34" class="r-dark" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="100" cy="12" r="10" class="r-lamp"/>
+  <rect x="12" y="62" width="18" height="52" rx="9" class="r-dark-f"/><rect x="170" y="62" width="18" height="52" rx="9" class="r-dark-f"/>
+  <rect x="26" y="32" width="148" height="128" rx="40" class="r-dark-f"/>
+  <rect x="26" y="32" width="148" height="120" rx="40" class="r-body"/>
+  <rect x="44" y="52" width="112" height="80" rx="24" class="r-screen"/>
+  <g class="r-eyes"><circle cx="76" cy="84" r="13" class="r-eye"/><circle cx="124" cy="84" r="13" class="r-eye"/>
+    <circle cx="76" cy="86" r="6" class="r-pupil"/><circle cx="124" cy="86" r="6" class="r-pupil"/></g>
+  <path class="r-smile" d="M78 108 Q100 124 122 108" fill="none" stroke-width="6" stroke-linecap="round"/>
+</svg>`;
+const robots = () => document.querySelectorAll(".robot");
+for (const r of robots()) r.innerHTML = ROBOT_SVG;
+audio.setOnTalk(on => robots().forEach(r => r.classList.toggle("talking", on)));
+function mood(m) {
+  for (const r of robots()) { r.classList.remove("happy", "sad"); void r.offsetWidth; if (m) r.classList.add(m); }
+}
+
+/* ---------- obrazovky (View Transitions, když je prohlížeč umí) ---------- */
+let current = "home";
+function show(id) {
+  const go = () => { for (const s of document.querySelectorAll(".screen")) s.hidden = s.id !== id; current = id; };
+  if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) document.startViewTransition(go);
+  else go();
+}
+
+/* ---------- hry ---------- */
+const ALL_LETTERS = ["A","E","I","O","U","M","L","S","P","T","K","R","N","V","D","B","J","H","Z","Š","Ž","Č","Ř","C","CH","F"];
+const LEVEL_OF = {}; for (const [l, ws] of Object.entries(LEVELS)) for (const w of ws) LEVEL_OF[w] = +l;
+const PIC_WORDS = Object.keys(PICS);
+const wordsOfLevels = lvs => Object.entries(LEVELS).filter(([l]) => lvs.includes(+l)).flatMap(([, ws]) => ws);
+
+/* Slova pro „První hláska“: první psané písmeno musí znít stejně jako první hláska (ne „včela“ → f, „děti“ → ď) */
+const firstOk = W => { const L = letters(W)[0]; return ALL_LETTERS.includes(L) && spell(W, true)[0].s === letterSound(L) && spell(W, false)[0].s === letterSound(L); };
+
+export const GAMES = {
+  listen: { icon: "👂", label: "Poslouchej", color: "blue",
+    say: "Poslouchej robota a ťukni na správný obrázek.",
+    tiers: [[1], [2], [3], [4, 5], [6, 7], [8, 9]], pool: lv => PIC_WORDS.filter(w => lv.includes(LEVEL_OF[w])) },
+  first: { icon: "A", label: "První hláska", color: "orange",
+    say: "Jakým písmenem začíná slovo?",
+    tiers: [[1], [2], [3], [4], [5], [6], [7], [8], [9]], pool: lv => wordsOfLevels(lv).filter(firstOk) },
+  build: { icon: "🧩", label: "Skládej", color: "green",
+    say: "Poslouchej a slož slovo z písmenek.",
+    tiers: [[1], [2], [3], [9], [4], [6], [5], [7], [8]], pool: lv => wordsOfLevels(lv) },
+  read: { icon: "📖", label: "Čti", color: "purple",
+    say: "Přečti slovo a ťukni na obrázek.",
+    tiers: [[1], [2], [3], [4, 5], [6, 7], [8, 9]], pool: lv => PIC_WORDS.filter(w => lv.includes(LEVEL_OF[w])) },
 };
-let settings = Object.assign({gap:450, assim:true, letters:false, lower:false, wordVoice:"own", phoneVoice:"own"}, store.get("hl-settings",{}));
-// starší nastavení „voice: robot“ → nové wordVoice
-if(settings.voice){ if(settings.voice==="robot" && !store.get("hl-settings",{}).wordVoice) settings.wordVoice="robot"; delete settings.voice; }
-/* Hlas pro celá slova:
-   own      – moje nahrávka → nahrávka aplikace (Ondra) → hlas telefonu
-   recorded – nahrávka aplikace (Ondra) → hlas telefonu (moje nahrávky se nepoužijí)
-   device   – vždy hlas telefonu (Google/Samsung); bez českého hlasu robot
-   robot    – vždy nahrávky aplikace (robotický hlas)
-   Hlásky: own – moje nahrávky, kde jsou, jinak výchozí; default – jen výchozí nahrávky aplikace */
-const WORD_VOICES={own:"Moje nahrávky, jinak nejlepší dostupný",recorded:"Nahrávky aplikace, jinak hlas telefonu",device:"Vždy hlas telefonu (Google/Samsung)",robot:"Robot"};
-let progress = store.get("hl-progress",{});
-let state = Object.assign({level:1, mode:"spell"}, store.get("hl-state",{}));
-const saveAll = ()=>{ store.set("hl-settings",settings); store.set("hl-progress",progress); store.set("hl-state",{level:state.level,mode:state.mode}); };
-const circled = lv => new Set(progress[lv]||[]);
-function setCircle(lv,w,on){ const s=circled(lv); on?s.add(w):s.delete(w); progress[lv]=[...s]; saveAll(); renderLevels(); }
+const ROUND = 5;
+const tierOf = g => Math.min(progress.tier[g] || 0, GAMES[g].tiers.length - 1);
 
-/* ---------- phonetics ---------- */
-const HARD = new Set(["KAPITÁN","NIKL"]);
-const SOFTEN = {d:"ď",t:"ť",n:"ň"};
-const VOICED = {b:"p",d:"t","ď":"ť",g:"k",v:"f",z:"s","ž":"š",h:"ch"};
-const VOICELESS = {p:"b",t:"d","ť":"ď",k:"g",s:"z","š":"ž",ch:"h"};   // f→v deliberately left out
-const SOUND = {y:"i","ý":"í","ů":"ú","ě":"e"};
-function spell(W){
-  const w = W.toLowerCase(), out=[];
-  for(let i=0;i<w.length;i++){
-    const c=w[i], n=w[i+1];
-    if(c==="c" && n==="h"){ out.push("ch"); i++; continue; }
-    if(SOFTEN[c] && !HARD.has(W) && (n==="ě"||n==="i"||n==="í")){ out.push(SOFTEN[c]); if(n==="ě"){ out.push("e"); i++; } continue; }
-    if("bpvf".includes(c) && n==="ě"){ out.push(c,"j","e"); i++; continue; }
-    if(c==="m" && n==="ě"){ out.push("m","ň","e"); i++; continue; }
-    out.push(c);
+function chooseWords(g) {
+  const G = GAMES[g], recent = new Set(progress.last[g] || []);
+  let t = tierOf(g), pool = [];
+  while (pool.length < ROUND && t < G.tiers.length) { pool = [...new Set([...pool, ...G.pool(G.tiers[t])])]; t++; }
+  const fresh = shuffle(pool.filter(w => !recent.has(w))), old = shuffle(pool.filter(w => recent.has(w)));
+  const out = []; const seenPic = new Set();
+  for (const w of [...fresh, ...old]) {
+    if (out.length >= ROUND) break;
+    if (PICS[w] && seenPic.has(PICS[w])) continue;
+    out.push(w); if (PICS[w]) seenPic.add(PICS[w]);
   }
-  if(settings.assim){
-    let next="voiceless"; // word end behaves as voiceless
-    for(let i=out.length-1;i>=0;i--){
-      let t=out[i];
-      const isVd = t in VOICED, isVl = t in VOICELESS || t==="f" || t==="c" || t==="č";
-      if(isVd && next==="voiceless") t = out[i] = VOICED[t];
-      else if((t in VOICELESS) && next==="voiced") t = out[i] = VOICELESS[t];
-      if(t in VOICED) next = (t==="v") ? "son" : "voiced";
-      else if(t in VOICELESS || t==="f" || t==="c" || t==="č") next="voiceless";
-      else next="son";
-    }
-  }
-  return out.map(d=>({d, s:SOUND[d]||d}));
-}
-function letters(W){ // written letters, CH as one
-  const r=[]; for(let i=0;i<W.length;i++){ if(W[i]==="C"&&W[i+1]==="H"){r.push("CH");i++;} else r.push(W[i]); } return r;
-}
-const cs = s => settings.lower ? s.toLowerCase() : s.toUpperCase();
-
-/* ---------- audio ---------- */
-let ctx=null; const buf={}, REC={};
-const AUDIO_DIRS = {w:"words", p:"phones", x:"phrases"};
-const audioUrl = key => `audio/${AUDIO_DIRS[key[0]]}/${encodeURIComponent(key.slice(2))}.ogg`;
-async function fetchAudio(key){
-  const r = await fetch(audioUrl(key));
-  if(!r.ok) throw new Error("audio " + key + " " + r.status);
-  return ctx.decodeAudioData(await r.arrayBuffer());
-}
-async function load(key){
-  if(buf[key]) return buf[key];
-  if(!AUDIO_KEYS.has(key)) return null;
-  try{ buf[key] = await fetchAudio(key); }catch(e){ return null; }
-  return buf[key];
-}
-let playToken=0, talkers=0;
-function talk(on){ talkers=Math.max(0,talkers+(on?1:-1)); robot.classList.toggle("talking",talkers>0); }
-/* Android (Samsung) pozastaví AudioContext po použití mikrofonu, při odchodu na pozadí
-   nebo při telefonátu. Pozastavený kontext nikdy nezavolá onended, takže by se aplikace zasekla.
-   Proto: před každým přehráním kontext probudit (případně vytvořit nový) a přehrávání
-   vždy ukončit nejpozději po délce nahrávky. AudioBuffer jde přehrát v libovolném kontextu. */
-const AC = window.AudioContext||window.webkitAudioContext;
-const withTimeout = (pr, ms) => Promise.race([pr, new Promise(r=>setTimeout(r, ms))]);
-async function ensureAudio(){
-  if(!ctx || ctx.state==="closed"){ ctx=new AC(); diag("audio: nový AudioContext"); }
-  if(ctx.state!=="running"){
-    const was=ctx.state;
-    try{ await withTimeout(ctx.resume(), 800); }catch(e){}
-    if(ctx.state!=="running"){
-      diag("audio: kontext zůstal "+ctx.state+" (byl "+was+"), vytvářím nový");
-      try{ ctx.close(); }catch(e){}
-      ctx=new AC();
-      try{ await withTimeout(ctx.resume(), 800); }catch(e){}
-    } else diag("audio: probuzen z "+was);
-  }
-  return ctx.state==="running";
-}
-function playBuf(b){ return new Promise(async res=>{
-  let done=false; const fin=()=>{ if(done) return; done=true; talk(false); res(); };
-  talk(true);
-  try{
-    await ensureAudio();
-    const s=ctx.createBufferSource(); s.buffer=b; s.connect(ctx.destination);
-    s.onended=fin; s.start();
-  }catch(e){ diag("audio: přehrání selhalo – "+e.message); }
-  setTimeout(fin, b.duration*1000+400);   // pojistka: nikdy nečekat déle než nahrávka
-}); }
-
-/* device voice (Google TTS on Android) for whole words */
-let csVoice=null;
-function pickVoice(){ const v=(window.speechSynthesis&&speechSynthesis.getVoices())||[];
-  csVoice = v.find(x=>/^cs/i.test(x.lang) && /google/i.test(x.name)) || v.find(x=>/^cs/i.test(x.lang)) || null; }
-if(window.speechSynthesis){ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }
-function ttsSay(text){ return new Promise(res=>{
-  const u=new SpeechSynthesisUtterance(text); u.lang="cs-CZ"; try{ u.voice=csVoice; }catch(e){} u.rate=0.85;
-  let done=false; const fin=()=>{ if(done) return; done=true; talk(false); res(); };
-  u.onend=fin; u.onerror=fin; setTimeout(fin, 4000);
-  speechSynthesis.cancel(); talk(true); speechSynthesis.speak(u); }); }
-const useDevice = ()=> settings.wordVoice!=="robot" && csVoice;
-
-async function play(key){
-  if(!ctx) return;
-  try{
-  if(key.startsWith("p_")){ const b=REC[key.slice(2)]; if(b) return playBuf(b); return; }
-  const wv=settings.wordVoice;
-  if(wv==="own" && key.startsWith("w_") && ownWords.has(key.slice(2))){ const b=await loadOwnWord(key.slice(2)); if(b) return playBuf(b); }
-  if((wv==="own"||wv==="recorded") && OWNV.has(key)){ const b=await load(key); if(b) return playBuf(b); }
-  if(useDevice()){
-    const text = key.startsWith("w_") ? key.slice(2).toLowerCase() : PHR[key.slice(2)];
-    if(text) return ttsSay(text);
-  }
-  const b = await load(key); if(b) return playBuf(b);
-  }catch(e){ diag("play "+key+": "+e.message); }
-}
-const PHR={ok1:"správně!",ok2:"výborně!",ok3:"super!",no:"zkus to znovu",done:"hotovo, dneska stačí"};
-const wait = ms => new Promise(r=>setTimeout(r,ms));
-async function sayWord(W){ playToken++; await play("w_"+W); }
-const hasAllRec = W => spell(W).every(p=>REC[p.s]);
-async function spellOut(W, onStep){
-  const my=++playToken, ph=spell(W);
-  for(let i=0;i<ph.length;i++){
-    if(my!==playToken) return false;
-    onStep && onStep(i);
-    if(REC[ph[i].s]) { await play("p_"+ph[i].s); await wait(settings.gap); }
-    else await wait(settings.gap+500);
-  }
-  onStep && onStep(-1);
-  return my===playToken;
-}
-const praise = ()=>play("x_ok"+(1+Math.floor(Math.random()*3)));
-
-/* ---------- recorded sounds (parent's voice) ---------- */
-const PHONES=[["a","máma"],["á","káva"],["e","pes"],["é","mléko"],["i","ryba"],["í","síla"],["o","oko"],["ó","gól"],["u","ucho"],["ú","úl"],
- ["m","máma"],["n","nos"],["ň","kůň"],["l","les"],["r","ruka"],["ř","řeka"],["s","sova"],["z","zima"],["š","šála"],["ž","žába"],
- ["c","cukr"],["č","čáp"],["j","jahoda"],["v","voda"],["f","fén"],["h","had"],["ch","chata"],
- ["p","pes"],["b","bota"],["t","táta"],["d","dům"],["ť","ťuk"],["ď","ďábel"],["k","kos"],["g","gól"]];
-let dbp=null;
-function db(){ if(!dbp) dbp=new Promise((res,rej)=>{ const r=indexedDB.open("hlaskoun",1);
-  r.onupgradeneeded=()=>r.result.createObjectStore("rec"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); return dbp; }
-async function dbOp(mode,fn){ const d=await db(); return new Promise((res,rej)=>{ const tx=d.transaction("rec",mode); const r=fn(tx.objectStore("rec")); tx.oncomplete=()=>res(r&&r.result); tx.onerror=()=>rej(tx.error); }); }
-function trim(b, rel=0.08, padS=0.03){
-  const d=b.getChannelData(0); let peak=0; for(const x of d) peak=Math.max(peak,Math.abs(x));
-  if(peak<0.01) return null;
-  const th=peak*rel; let s=0,e=d.length-1; while(s<e&&Math.abs(d[s])<th)s++; while(e>s&&Math.abs(d[e])<th)e--;
-  const pad=Math.floor(b.sampleRate*padS); s=Math.max(0,s-pad); e=Math.min(d.length,e+pad);
-  const out=ctx.createBuffer(1,e-s,b.sampleRate), o=out.getChannelData(0), g=0.9/peak;
-  for(let i=0;i<e-s;i++) o[i]=d[s+i]*g;
-  const f=Math.min(200,o.length); for(let i=0;i<f;i++){ o[i]*=i/f; o[o.length-1-i]*=i/f; }
   return out;
 }
-async function decodeRec(blob, word=false){ const b=await ctx.decodeAudioData(await blob.arrayBuffer()); return word ? trim(b, 0.03, 0.08) : trim(b); }
 
-/* ---------- vlastní nahrávky celých slov (klíč "w:SLOVO" v IndexedDB) ---------- */
-const ownWords=new Set(), WREC={};
-async function loadOwnWordList(){
-  try{ const keys=await dbOp("readonly",s=>s.getAllKeys()); ownWords.clear();
-    for(const k of keys||[]) if(typeof k==="string" && k.startsWith("w:")) ownWords.add(k.slice(2)); }
-  catch(e){ diag("seznam vlastních slov: "+e.message); }
-}
-async function loadOwnWord(W){
-  if(WREC[W]) return WREC[W];
-  try{ const blob=await dbOp("readonly",s=>s.get("w:"+W)); if(!blob) return null;
-    WREC[W]=await decodeRec(blob,true); return WREC[W]; }
-  catch(e){ diag("vlastní slovo "+W+": "+e.message); return null; }
-}
-/* REC = hlásky, které se právě používají; OWNP = moje nahrávky, DEFP = výchozí nahrávky aplikace */
-const OWNP={}, DEFP={};
-function applyPhoneVoice(){
-  for(const k of Object.keys(REC)) delete REC[k];
-  Object.assign(REC, DEFP, settings.phoneVoice==="own" ? OWNP : {});
-}
-async function loadRecs(){
-  try{ for(const [k] of PHONES){ const blob=await dbOp("readonly",s=>s.get(k)); if(blob){ const b=await decodeRec(blob); if(b) OWNP[k]=b; } } }
-  catch(e){ diag("načtení mých hlásek: "+e.message); }
-  await Promise.all(PHONES.filter(([k])=>AUDIO_KEYS.has("p_"+k))
-    .map(async([k])=>{ try{ DEFP[k]=await fetchAudio("p_"+k); }catch(e){} }));
-  applyPhoneVoice();
-}
-/* ---------- timer ---------- */
-let secs=300, tick=null, doneSaid=false;
-function startTimer(){ if(tick) return; tick=setInterval(()=>{ secs--; const el=$("timer");
-  if(secs>=0){ el.textContent=Math.floor(secs/60)+":"+String(secs%60).padStart(2,"0"); }
-  else { el.textContent="hotovo"; el.classList.add("over"); if(!doneSaid){ doneSaid=true; play("x_done"); } clearInterval(tick); }
-},1000); }
+/* Stav kola */
+const R = { game: null, words: [], i: 0, results: [], mistakes: 0, busy: false, word: null, onAgain: null };
 
-/* ---------- word queue ---------- */
-let queue=[], word=null;
-function nextWord(){
-  if(!queue.length){
-    const all=LEVELS[state.level], c=circled(state.level);
-    const fresh=all.filter(w=>!c.has(w)), rest=all.filter(w=>c.has(w));
-    queue=[...shuffle(fresh),...shuffle(rest)];
-    if(word && queue[0]===word && queue.length>1) queue.push(queue.shift());
+function renderGames() {
+  $("games").replaceChildren(...Object.entries(GAMES).map(([id, G]) =>
+    h("button", { class: "game " + G.color, "data-game": id, "aria-label": G.label, onclick: () => startGame(id) },
+      h("span", { class: "game-icon" + (G.icon.length === 1 ? " letter" : ""), "aria-hidden": "true" }, G.icon),
+      h("span", { class: "game-label" }, G.label),
+      h("span", { class: "game-level", "aria-hidden": "true" }, "★".repeat(Math.min(tierOf(id) + 1, 6))))));
+  $("starTotal").textContent = progress.stars;
+}
+
+let started = false;
+async function unlock() {           // první dotyk: odemknout zvuk a načíst nahrávky
+  if (started) return; started = true;
+  await ensureAudio();
+  await audio.loadRecs(); await audio.loadOwnWordList(); audio.pickVoice(); setTimeout(audio.pickVoice, 1500);
+}
+
+export async function startGame(g) {
+  stopAll();
+  await unlock();
+  Object.assign(R, { game: g, words: chooseWords(g), i: 0, results: [], mistakes: 0 });
+  document.body.dataset.game = GAMES[g].color;
+  diag("hra " + g + " úroveň " + tierOf(g) + ": " + R.words.join(" "));
+  show("game");
+  renderDots();
+  await wait(350);
+  await sayText(GAMES[g].say);
+  nextWord(true);
+}
+
+function renderDots() {
+  $("dots").replaceChildren(...R.words.map((_, k) => h("li", {
+    class: k < R.results.length ? (R.results[k] ? "gold" : "silver") : (k === R.i ? "now" : "") })));
+}
+
+function nextWord(first = false) {
+  if (R.i >= R.words.length) return finishRound();
+  R.word = R.words[R.i]; R.mistakes = 0; R.busy = false;
+  mood(); renderDots();
+  ({ listen: gListen, first: gFirst, build: gBuild, read: gRead })[R.game](R.word, first);
+}
+
+async function correct(el) {
+  if (R.busy) return; R.busy = true;
+  el && el.classList.add("ok");
+  stopAll(); mood("happy"); vibrate(30); burst(el);
+  R.results.push(R.mistakes === 0); renderDots();
+  await praise();
+  await wait(500);
+  R.i++; nextWord();
+}
+async function wrong(el, sayFn) {
+  R.mistakes++;
+  if (el) { el.classList.remove("shake"); void el.offsetWidth; el.classList.add("bad", "shake"); }
+  mood("sad"); vibrate([60, 40, 60]);
+  stopAll();
+  if (sayFn) await sayFn();
+  if (R.mistakes === 1 || R.mistakes % 3 === 0) await oops();
+}
+
+const picCard = (W, onclick) => h("button", { class: "pic", "data-word": W, "aria-label": W.toLowerCase(), onclick }, h("span", {}, PICS[W]));
+function pictureOptions(W, n = 3) {
+  const others = shuffle(PIC_WORDS.filter(w => w !== W && PICS[w] !== PICS[W]));
+  // podobná slova (stejná délka nebo začátek) dělají hru zajímavější, ale ne příliš těžkou
+  const similar = others.filter(w => letters(w).length === letters(W).length || w[0] === W[0]);
+  const chosen = [...new Set([...similar.slice(0, 1), ...others])].filter((w, i, a) => a.findIndex(x => PICS[x] === PICS[w]) === i).slice(0, n - 1);
+  return shuffle([W, ...chosen]);
+}
+// Ručička ukáže, kam ťuknout – jen v prvních kolech každé hry, než si to dítě osvojí
+const hand = () => (progress.played?.[R.game] || 0) < 2 ? h("div", { class: "hand", "aria-hidden": "true" }, "👆") : null;
+
+/* 1) Poslouchej: robot vyhláskuje, dítě ťukne na obrázek */
+function gListen(W, first) {
+  const ph = spell(W, settings.assim);
+  const tiles = ph.map(() => h("span", { class: "tile" }));
+  $("prompt").replaceChildren(h("div", { class: "tiles" }, tiles));
+  const go = () => spellOut(W, i => tiles.forEach((t, k) => { t.classList.toggle("on", k === i); if (k === i) t.classList.add("seen"); }));
+  R.onAgain = go;
+  $("answers").replaceChildren(h("div", { class: "pics" }, pictureOptions(W).map(w =>
+    picCard(w, e => { if (R.busy) return; w === W ? correct(e.currentTarget) : wrong(e.currentTarget, () => sayWord(w)); }))),
+    first ? hand() : null);
+  setTimeout(go, 300);
+}
+
+/* 2) První hláska: obrázek + slovo, dítě vybere první písmeno */
+function gFirst(W, first) {
+  const L = letters(W)[0];
+  const opts = shuffle([L, ...shuffle(ALL_LETTERS.filter(x => letterSound(x) !== letterSound(L))).slice(0, 2)]);
+  const rest = letters(W).slice(1).map(x => h("span", { class: "ltr dim" }, cs(x)));
+  const firstSlot = h("span", { class: "ltr slot" }, "?");
+  $("prompt").replaceChildren(
+    PICS[W] ? h("button", { class: "pic hero-pic", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, h("span", {}, PICS[W]))
+            : h("button", { class: "speaker", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, "🔊"),
+    h("div", { class: "word-row" }, firstSlot, rest));
+  R.onAgain = () => sayWord(W);
+  $("answers").replaceChildren(h("div", { class: "letters" }, opts.map(x =>
+    h("button", { class: "letter-btn", "aria-label": "písmeno " + x, onclick: e => {
+      const el = e.currentTarget; if (R.busy) return;
+      if (x === L) { R.busy = true; el.classList.add("ok"); firstSlot.textContent = cs(x); firstSlot.classList.add("filled"); rest.forEach(r => r.classList.remove("dim")); sayPhone(letterSound(x)).then(() => { R.busy = false; correct(el); }); }
+      else wrong(el, () => sayPhone(letterSound(x)));
+    } }, cs(x)))), first ? hand() : null);
+  setTimeout(() => sayWord(W), 300);
+}
+
+/* 3) Skládej: slovo zazní (a je obrázek, pokud existuje), dítě skládá písmena; špatné písmeno se nepřijme */
+function gBuild(W, first) {
+  const L = letters(W);
+  const extra = shuffle(ALL_LETTERS.filter(x => !L.includes(x))).slice(0, L.length <= 4 ? 2 : 3);
+  const bank = shuffle([...L.map((l, i) => ({ l, i })), ...extra.map((l, i) => ({ l, i: 100 + i }))]);
+  const slots = L.map(() => h("span", { class: "ltr slot" }));
+  let pos = 0, missHere = 0;
+  $("prompt").replaceChildren(
+    PICS[W] ? h("button", { class: "pic hero-pic small", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, h("span", {}, PICS[W]))
+            : h("button", { class: "speaker", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, "🔊"),
+    h("div", { class: "word-row" + (L.length > 6 ? " long" : "") }, slots));
+  R.onAgain = () => sayWord(W);
+  const keys = bank.map(b => h("button", { class: "key", "aria-label": "písmeno " + b.l, onclick: e => {
+    if (R.busy) return;
+    const k = e.currentTarget;
+    sayPhone(letterSound(b.l));
+    if (b.l === L[pos]) {
+      slots[pos].textContent = cs(b.l); slots[pos].classList.add("filled"); k.disabled = true; k.classList.add("used");
+      for (const q of keys) q.classList.remove("hint");
+      pos++; missHere = 0;
+      if (pos === L.length) { R.busy = true; slots.forEach(s => s.classList.add("ok")); wait(350).then(() => sayWord(W)).then(() => { R.busy = false; correct(null); }); }
+    } else {
+      missHere++;
+      wrong(k, null);
+      setTimeout(() => k.classList.remove("bad"), 600);
+      if (missHere >= 2) keys.find(q => !q.disabled && bank[keys.indexOf(q)].l === L[pos])?.classList.add("hint");
+    }
+  } }, cs(b.l)));
+  $("answers").replaceChildren(h("div", { class: "bank" }, keys), first ? hand() : null);
+  setTimeout(() => sayWord(W), 300);
+}
+
+/* 4) Čti: slovo napsané, dítě ťukne na obrázek; 🔊 přečte slovo (pomoc) */
+function gRead(W, first) {
+  $("prompt").replaceChildren(h("div", { class: "read-word" + (W.length > 6 ? " long" : "") }, cs(W)));
+  R.onAgain = () => { R.mistakes++; sayWord(W); };
+  $("answers").replaceChildren(h("div", { class: "pics" }, pictureOptions(W).map(w =>
+    picCard(w, e => { const el = e.currentTarget; if (R.busy) return;
+      if (w === W) { R.busy = true; el.classList.add("ok"); sayWord(W).then(() => { R.busy = false; correct(el); }); }
+      else wrong(el, () => sayWord(w)); }))),
+    first ? hand() : null);
+}
+
+async function finishRound() {
+  const gold = R.results.filter(Boolean).length;
+  progress.stars += gold; progress.rounds++; core.addToday(1);
+  progress.played = { ...(progress.played || {}), [R.game]: ((progress.played || {})[R.game] || 0) + 1 };
+  const g = R.game, t = tierOf(g);
+  if (gold >= ROUND && t < GAMES[g].tiers.length - 1) progress.tier[g] = t + 1;
+  else if (gold <= 2 && t > 0) progress.tier[g] = t - 1;
+  progress.last[g] = [...R.words, ...(progress.last[g] || [])].slice(0, 15);
+  saveProgress();
+  diag(`kolo ${g}: ${gold}/${ROUND}, úroveň ${t}→${tierOf(g)}`);
+  $("earned").replaceChildren(...R.results.map((ok, k) => h("span", { class: "star " + (ok ? "gold" : "silver"), style: `--d:${k * 0.15}s` }, "★")));
+  show("done"); confetti();
+  vibrate([30, 60, 30, 60, 80]);
+  await wait(500);
+  await sayText(gold >= 4 ? "Hurá! Výborně!" : "Hotovo! Jen tak dál!");
+}
+
+/* ---------- efekty ---------- */
+function burst(el) {
+  if (!el) el = $("prompt");
+  const r = el.getBoundingClientRect();
+  for (let k = 0; k < 10; k++) {
+    const p = h("span", { class: "spark", style: `left:${r.left + r.width / 2}px;top:${r.top + r.height / 2}px;--a:${k * 36}deg` }, "✦");
+    document.body.append(p); setTimeout(() => p.remove(), 700);
   }
-  word=queue.shift(); render();
 }
-function shuffle(a){ a=[...a]; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function confetti() {
+  const colors = ["#FF6B6B", "#FFD93D", "#6BCB77", "#4D96FF", "#B983FF"];
+  $("confetti").replaceChildren(...Array.from({ length: 40 }, (_, k) => h("i", {
+    style: `left:${Math.random() * 100}%;background:${colors[k % 5]};--d:${Math.random() * 0.8}s;--x:${(Math.random() - 0.5) * 120}px` })));
+}
 
-/* ---------- ui helpers ---------- */
-const $=id=>document.getElementById(id);
-const robot=$("robot"), screen=$("screen"), panel=$("panel"), actions=$("actions");
-function h(tag,attrs={},...kids){ const e=document.createElement(tag);
-  for(const[k,v] of Object.entries(attrs)){ if(k.startsWith("on")) e.addEventListener(k.slice(2),v); else if(k==="class") e.className=v; else e.setAttribute(k,v); }
-  for(const k of kids.flat()) if(k!=null) e.append(k.nodeType?k:document.createTextNode(k)); return e; }
-function mood(m){ robot.classList.remove("happy","sad","shake"); void robot.offsetWidth; if(m==="happy") robot.classList.add("happy"); if(m==="sad") robot.classList.add("sad","shake"); }
-function setActions(...btns){ actions.replaceChildren(...btns); }
-const btn=(label,cls,fn)=>h("button",{class:"btn "+(cls||""),onclick:fn},label);
+/* ---------- ovládání ---------- */
+$("homeBtn").onclick = () => { stopAll(); renderGames(); show("home"); };
+$("againBtn").onclick = () => { stopAll(); R.onAgain && R.onAgain(); };
+$("playAgain").onclick = () => startGame(R.game);
+$("goHome").onclick = () => { renderGames(); show("home"); };
+document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => b.closest("dialog").close()));
 
-function renderLevels(){
-  $("levels").replaceChildren(...Object.keys(LEVELS).map(lv=>{
-    const pct=Math.round(100*circled(lv).size/LEVELS[lv].length);
-    return h("button",{class:"lv","aria-pressed":String(+lv===state.level),"aria-label":`Úroveň ${lv}, ${pct} % zakroužkováno`,onclick:()=>{ state.level=+lv; queue=[]; saveAll(); renderLevels(); nextWord(); }},
-      lv, h("small",{},h("i",{style:`width:${pct}%`})));
+/* Pozdrav robota při prvním dotyku na úvodní obrazovce */
+$("robotHome").addEventListener("click", async () => { await unlock(); sayText("Ahoj! Vyber si hru."); });
+
+/* ---------- koutek pro rodiče: podržet ⚙️ 1,5 s ---------- */
+(() => {
+  const btn = $("parentBtn"); let t = null;
+  const cancel = () => { clearTimeout(t); t = null; btn.classList.remove("holding"); };
+  btn.addEventListener("pointerdown", e => { e.preventDefault(); btn.classList.add("holding"); t = setTimeout(() => { cancel(); openParent(); }, 1500); });
+  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => btn.addEventListener(ev, () => {
+    if (t) { cancel(); $("parentHint").hidden = false; setTimeout(() => $("parentHint").hidden = true, 2500); }
   }));
-  const c=circled(state.level).size, n=LEVELS[state.level].length;
-  $("lvnote").textContent=`${NOTES[state.level]} · zakroužkováno ${c} z ${n}`;
+  btn.addEventListener("contextmenu", e => e.preventDefault());
+  btn.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") openParent(); });
+})();
+export async function openParent() {
+  stopAll(); await unlock();
+  renderProgress(); $("dlgParent").showModal();
 }
-function renderModes(){
-  $("modes").replaceChildren(...MODES.map(m=>h("button",{class:"mode","aria-pressed":String(m.id===state.mode),onclick:()=>{ state.mode=m.id; saveAll(); renderModes(); render(); }},h("span",{"aria-hidden":"true"},m.icon),m.label)));
+function renderProgress() {
+  $("progressList").replaceChildren(
+    h("p", { class: "note" }, `Hvězdiček celkem: ${progress.stars} · odehraných kol: ${progress.rounds} · dnes: ${core.todayCount()}`),
+    ...Object.entries(GAMES).map(([id, G]) => h("div", { class: "prog-row" },
+      h("span", { class: "prog-name" }, G.label),
+      h("button", { class: "mini", "aria-label": G.label + " lehčí", onclick: () => { progress.tier[id] = Math.max(0, tierOf(id) - 1); saveProgress(); renderProgress(); renderGames(); } }, "−"),
+      h("span", { class: "prog-tier" }, `úroveň ${tierOf(id) + 1}/${G.tiers.length}`),
+      h("button", { class: "mini", "aria-label": G.label + " těžší", onclick: () => { progress.tier[id] = Math.min(G.tiers.length - 1, tierOf(id) + 1); saveProgress(); renderProgress(); renderGames(); } }, "+"))));
 }
+$("pRec").onclick = openRec;
+$("pWords").onclick = () => { renderWords(); $("dlgWords").showModal(); };
+$("pSet").onclick = openSet;
+$("pDiag").onclick = () => { renderDiag(); $("dlgDiag").showModal(); };
 
-/* ---------- modes ---------- */
-/* Posun na další slovo se zpožděním (po pochvale). Zruší se, když uživatel mezitím
-   cokoli udělá (jiné slovo, režim, otevře okno) – jinak by se slovo změnilo pod rukama. */
-let navToken=0;
-function nextLater(ms){ const t=++navToken; setTimeout(()=>{ if(t===navToken && !document.querySelector("dialog[open]")) nextWord(); },ms); }
-document.addEventListener("click",e=>{ if(!e.target.closest(".good")) navToken++; },{capture:true});
-function render(){ playToken++; mood(); ({spell:rSpell,guess:rGuess,write:rWrite,read:rRead})[state.mode]();
-  panel.append(h("div",{class:"wordrecrow"},h("button",{class:"wordrec",id:"openWordRec",onclick:openWordRec},
-    ownWords.has(word) ? "🎙 Slovo namluvené vámi · upravit" : "🎙 Namluvit slovo"))); }
-
-function rSpell(){
-  const ph=spell(word); let revealed=false;
-  const own=!hasAllRec(word);
-  const tiles=ph.map(p=>h("div",{class:"tile"},(settings.letters||own)?cs(p.d):"•"));
-  const wd=h("div",{class:"word hidden"},"?".repeat(Math.min(word.length,6)));
-  screen.replaceChildren(h("div",{class:"tiles"},tiles), wd);
-  const go=()=>spellOut(word,i=>tiles.forEach((t,k)=>{ t.classList.toggle("on",k===i); if(k===i) t.classList.add("seen"); }));
-  const reveal=()=>{ revealed=true; wd.textContent=cs(word); wd.classList.remove("hidden"); ph.forEach((p,k)=>tiles[k].textContent=cs(p.d)); sayWord(word); };
-  panel.replaceChildren(own
-    ? h("div",{class:"tip"},"Hlásky zatím nejsou namluvené, hláskujte proto podle displeje sami: robot vám ukazuje tempo. ",h("button",{class:"link",onclick:openRec},"Namluvit hlásky"))
-    : h("p",{class:"tip"},"Robot slovo vyhláskuje vaším hlasem, dítě ho řekne celé. Když neví, dejte nápovědu (třeba „mám to na obličeji“) a nechte hláskovat znovu."));
-  setActions(btn("🔁 Hláskuj","",go), btn("👀 Ukázat","",reveal),
-    btn("✓ Složil(a)","good",()=>{ setCircle(state.level,word,true); if(!revealed) reveal(); mood("happy"); praise(); nextLater(1600); }),
-    btn("Další ›","main",nextWord));
-  setTimeout(go,350);
-}
-
-function rGuess(){
-  const ph=spell(word).map(p=>p.d);
-  const kinds=["first","last"]; if(ph.length>=3) kinds.push("mid");
-  const kind=kinds[Math.floor(Math.random()*kinds.length)];
-  let target, q;
-  if(kind==="first"){ target=ph[0]; q="Jakou hláskou slovo začíná?"; }
-  else if(kind==="last"){ target=ph[ph.length-1]; q="Jakou hláskou slovo končí?"; }
-  else { const mids=ph.slice(1,-1); target=mids[Math.floor(Math.random()*mids.length)]; q="Která hláska je uvnitř slova?"; }
-  const pool=["a","e","i","o","u","á","í","m","n","l","s","p","t","k","r","v","d","b","j","h","z","š","ž","č","ř","c","ch","ň","ť","ď","f"]
-    .filter(x=>x!==target && (kind==="mid" ? !ph.includes(x) : (x!==target)) && !(kind==="first"&&x===ph[0]) && !(kind==="last"&&x===ph[ph.length-1]));
-  const opts=shuffle([target,...shuffle(pool).slice(0,3)]);
-  const wd=h("div",{class:"word hidden"},"?".repeat(Math.min(word.length,6)));
-  screen.replaceChildren(wd, h("div",{class:"hint"},"Poslouchej, co robot říká."));
-  let tries=0, done=false;
-  const ob=opts.map(o=>h("button",{class:"opt","aria-label":"hláska "+o,onclick:async e=>{
-    if(done) return; tries++;
-    if(o===target){ done=true; e.currentTarget.classList.add("ok"); mood("happy"); wd.textContent=cs(word); wd.classList.remove("hidden");
-      if(tries===1) setCircle(state.level,word,true);
-      await play("p_"+(SOUND[o]||o)); await praise(); }
-    else { e.currentTarget.classList.add("bad"); e.currentTarget.disabled=true; mood("sad"); await play("p_"+(SOUND[o]||o)); }
-  }},cs(o)));
-  panel.replaceChildren(h("p",{class:"q"},q), h("div",{class:"opts"},ob),
-    h("p",{class:"tip"},"Klepnutím na hlásku ji robot zahraje. Když je dítě bezradné, nechte slovo vyhláskovat."));
-  setActions(btn("🔊 Řekni slovo","",()=>sayWord(word)), btn("🔁 Hláskuj","",()=>spellOut(word)), btn("Další ›","main",nextWord));
-  setTimeout(()=>sayWord(word),300);
-}
-
-function rWrite(){
-  const L=letters(word), typed=[];
-  const extraPool=["A","E","I","O","U","Í","Á","M","L","S","T","K","P","R","N","V","Y","D","Z","J"].filter(x=>!L.includes(x));
-  const bank=shuffle([...L.map((l,i)=>({l,i})), ...shuffle(extraPool).slice(0,2).map((l,i)=>({l,i:100+i}))]);
-  const slots=L.map(()=>h("div",{class:"slot"}," "));
-  const wd=h("div",{class:"word hidden"},"✏️");
-  screen.replaceChildren(wd, h("div",{class:"hint"},"Robot řekne slovo. Napiš ho z písmen dole, nebo na papír."));
-  let keys;
-  const paint=()=>{ slots.forEach((s,i)=>{ s.textContent=typed[i]?cs(typed[i].l):" "; s.className="slot"+(typed[i]?" f":""); });
-    keys.forEach(k=>k.disabled=typed.some(t=>t.i===+k.dataset.i)); };
-  const check=()=>{
-    const ok=typed.every((t,i)=>t.l===L[i]);
-    typed.forEach((t,i)=>slots[i].classList.add(t.l===L[i]?"ok":"bad"));
-    if(ok){ mood("happy"); setCircle(state.level,word,true); wd.textContent=cs(word); wd.classList.remove("hidden"); praise(); }
-    else { mood("sad"); play("x_no"); setTimeout(()=>{ for(let i=typed.length-1;i>=0;i--) if(typed[i].l!==L[i]) typed.splice(i); paint(); },1100); }
-  };
-  keys=bank.map(b=>h("button",{class:"key","data-i":b.i,onclick:()=>{ if(typed.length>=L.length) return; typed.push(b); paint(); play("p_"+((spell(b.l)[0]||{}).s)); if(typed.length===L.length) setTimeout(check,350); }},cs(b.l)));
-  panel.replaceChildren(h("div",{class:"slots",onclick:()=>{ typed.pop(); paint(); }},slots), h("div",{class:"bank"},keys),
-    h("p",{class:"tip"},"Klepnutím na řádek s písmeny smažete poslední písmeno."));
-  paint();
-  setActions(btn("🔊 Řekni slovo","",()=>sayWord(word)), btn("👀 Ukázat","",()=>{ wd.textContent=cs(word); wd.classList.remove("hidden"); }), btn("Další ›","main",nextWord));
-  setTimeout(()=>sayWord(word),300);
-}
-
-function rRead(){
-  const wd=h("div",{class:"word"},cs(word));
-  screen.replaceChildren(wd);
-  panel.replaceChildren(h("p",{class:"tip"},"Dítě slovo přečte nahlas. Nezná písmeno? Ať se zeptá – to je v pořádku. Robot pak může slovo přečíst pro kontrolu."));
-  setActions(btn("🔊 Přečti","",()=>sayWord(word)), btn("🔁 Hláskuj","",()=>spellOut(word)),
-    btn("✓ Přečetl(a)","good",()=>{ setCircle(state.level,word,true); mood("happy"); praise(); nextLater(1300); }),
-    btn("Další ›","main",nextWord));
-}
-
-/* ---------- dialogs ---------- */
-document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>b.closest("dialog").close()));
-function renderGrid(){
-  const c=circled(state.level);
-  $("listTitle").textContent=`Úroveň ${state.level} · ${c.size} z ${LEVELS[state.level].length}`;
-  $("grid").replaceChildren(...LEVELS[state.level].map(w=>h("button",{class:"gw"+(c.has(w)?" c":"")+(ownWords.has(w)?" own":""),onclick:()=>{ setCircle(state.level,w,!circled(state.level).has(w)); renderGrid(); }},cs(w))));
-}
-$("openList").onclick=()=>{ renderGrid(); $("dlgList").showModal(); };
-$("resetLv").onclick=()=>{ if(confirm("Smazat všechny kroužky v této úrovni?")){ progress[state.level]=[]; saveAll(); renderLevels(); renderGrid(); } };
-function voiceNote(){
-  const wv=settings.wordVoice;
-  const dev = csVoice ? "Hlas telefonu: "+csVoice.name+"." : "Telefon nemá český hlas – použije se robot. Nastavení telefonu → Převod textu na řeč → Google → stáhnout češtinu.";
-  $("voiceNote").textContent = wv==="robot" ? "Robotický hlas z nahrávek aplikace." :
-    wv==="own" ? "Vaše namluvená slova (🎙), jinak nahrávky aplikace, jinak hlas telefonu. "+dev :
-    wv==="recorded" ? "Vaše namluvená slova se nepoužijí. "+dev : dev;
-  const own=PHONES.filter(([k])=>OWNP[k]).length;
-  $("phoneNote").textContent = settings.phoneVoice==="own"
-    ? (own ? `Používá se ${own} vašich hlásek, zbytek výchozí.` : "Zatím nemáte namluvené hlásky – používají se výchozí.")
-    : "Výchozí nahrávky aplikace"+(own?` (vašich ${own} hlásek zůstává uloženo).`:".");
-}
-$("openSet").onclick=()=>{ $("wordVoice").value=settings.wordVoice; $("phoneVoice").value=settings.phoneVoice; pickVoice(); voiceNote(); $("gap").value=settings.gap; $("assim").checked=settings.assim; $("letters").checked=settings.letters; $("lower").checked=settings.lower; $("dlgSet").showModal(); };
-$("gap").oninput=e=>{ settings.gap=+e.target.value; saveAll(); };
-["assim","letters","lower"].forEach(k=>$(k).onchange=e=>{ settings[k]=e.target.checked; saveAll(); });
-$("dlgSet").addEventListener("close",()=>{ renderGrid(); render(); });
-
-/* ---------- recording dialog ---------- */
-let stream=null, activeRec=null;
-function stopRec(){ if(!activeRec) return; clearTimeout(activeRec.timer); const {mr}=activeRec; activeRec=null; if(mr.state==="recording") setTimeout(()=>mr.stop(),150); }
-async function getMic(){
-  if(stream) return stream;
-  if(!navigator.mediaDevices||!window.MediaRecorder) throw new Error("nosupport");
-  stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
-  return stream;
-}
-function recMsg(t){ const m=$("recMsg"); m.hidden=!t; m.textContent=t||""; }
-function renderRec(){
-  $("recGrid").replaceChildren(...PHONES.map(([k,ex])=>{
-    const b=h("button",{class:"rk"+(OWNP[k]?" has":""),"aria-label":`hláska ${k}, jako ${ex}`},h("b",{},cs(k)),h("span",{},ex));
-    b.addEventListener("click",async()=>{
-      if(activeRec){ const same=activeRec.k===k; stopRec(); if(same) return; }
+/* --- namlouvání hlásek --- */
+let activeRec = null;
+function recMsg(t) { const m = $("recMsg"); m.hidden = !t; m.textContent = t || ""; }
+function renderRec() {
+  $("recGrid").replaceChildren(...audio.PHONES.map(([k, ex]) => {
+    const b = h("button", { class: "rk" + (audio.OWNP[k] ? " has" : ""), "aria-label": `hláska ${k}, jako ${ex}` }, h("b", {}, cs(k)), h("span", {}, ex));
+    b.addEventListener("click", async () => {
+      if (activeRec) { const same = activeRec.k === k; activeRec.r.stop(); if (same) return; }
       recMsg("Připravuji mikrofon…");
-      let s;
-      try{ if(ctx.state==="suspended") await ctx.resume(); s=await getMic(); }
-      catch(err){
-        if(err&&err.message==="nosupport") recMsg("Tento prohlížeč neumí nahrávat. Otevřete aplikaci v Chromu.");
-        else if(err&&(err.name==="NotAllowedError"||err.name==="SecurityError")) recMsg("Mikrofon je zablokovaný. V Chromu ťukněte na ikonu vlevo od adresy → Oprávnění → Mikrofon → Povolit a stránku obnovte. Pokud to nepomůže, namluvte hlásky do jedné nahrávky a pošlete ji do chatu.");
-        else recMsg("Mikrofon se nepodařilo spustit ("+((err&&err.name)||"chyba")+"). Zkuste stránku obnovit.");
-        return;
-      }
-      const chunks=[]; const mr=new MediaRecorder(s);
-      mr.ondataavailable=ev=>{ if(ev.data&&ev.data.size) chunks.push(ev.data); };
-      mr.onstop=async()=>{ b.classList.remove("rec");
-        const blob=new Blob(chunks,{type:mr.mimeType||"audio/webm"});
-        try{ const buf=await decodeRec(blob); if(!buf){ recMsg("Nic nebylo slyšet. Mluvte blíž k telefonu a zkuste to znovu."); return; }
-          OWNP[k]=buf; await dbOp("readwrite",st=>st.put(blob,k)); b.classList.add("has"); applyPhoneVoice();
-          recMsg(`Uloženo: ${cs(k)}. Namluveno ${PHONES.filter(([q])=>OWNP[q]).length} z ${PHONES.length}.`+(settings.phoneVoice==="own"?"":" Pozor: v Nastavení jsou zapnuté výchozí hlásky, vaše se nepoužijí.")); playBuf(buf); }
-        catch(err){ recMsg("Nahrávku se nepodařilo zpracovat, zkuste to znovu."); } };
-      mr.start(); b.classList.add("rec"); recMsg(`Nahrávám ${cs(k)}… řekněte hlásku teď.`);
-      activeRec={k,mr,timer:setTimeout(stopRec,1800)};
+      let r; try { r = await audio.record(1800); } catch (err) { recMsg(audio.micError(err)); diag("mikrofon: " + (err.name || err.message)); return; }
+      activeRec = { k, r }; b.classList.add("rec"); recMsg(`Nahrávám ${cs(k)}… řekněte hlásku teď.`);
+      const blob = await r.done; b.classList.remove("rec"); if (activeRec && activeRec.k === k) activeRec = null;
+      try {
+        const buf = await audio.savePhone(k, blob);
+        if (!buf) { recMsg("Nic nebylo slyšet. Mluvte blíž k telefonu a zkuste to znovu."); return; }
+        b.classList.add("has");
+        recMsg(`Uloženo: ${cs(k)}. Namluveno ${audio.PHONES.filter(([q]) => audio.OWNP[q]).length} z ${audio.PHONES.length}.` +
+          (settings.phoneVoice === "own" ? "" : " Pozor: v Nastavení jsou zapnuté výchozí hlásky."));
+        audio.playBuf(buf);
+      } catch (err) { recMsg("Nahrávku se nepodařilo zpracovat, zkuste to znovu."); diag("hláska " + k + ": " + err.message); }
     });
-    b.addEventListener("contextmenu",e=>e.preventDefault());
+    b.addEventListener("contextmenu", e => e.preventDefault());
     return b;
   }));
-  const n=PHONES.filter(([k])=>OWNP[k]).length;
-  if(!$("recMsg").textContent) recMsg((n?`Namluveno ${n} z ${PHONES.length} hlásek.`:"")+
-    (settings.phoneVoice==="own"?"":" V Nastavení jsou zapnuté výchozí hlásky – vaše nahrávky se teď nepoužívají."));
+  const n = audio.PHONES.filter(([k]) => audio.OWNP[k]).length;
+  recMsg((n ? `Namluveno ${n} z ${audio.PHONES.length} hlásek.` : "") + (settings.phoneVoice === "own" ? "" : " V Nastavení jsou zapnuté výchozí hlásky – vaše se teď nepoužívají."));
 }
-function openRec(){ recMsg(""); renderRec(); $("dlgRec").showModal(); }
-$("openRec").onclick=openRec;
-$("recTest").onclick=()=>spellOut(word||"NOS");
-$("dlgRec").addEventListener("close",()=>{ stopRec(); if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } ensureAudio().finally(render); });
-$("wordVoice").onchange=e=>{ settings.wordVoice=e.target.value; saveAll(); voiceNote(); diag("hlas slov: "+settings.wordVoice); if(word){ playToken++; play("w_"+word); } };
-$("phoneVoice").onchange=e=>{ settings.phoneVoice=e.target.value; saveAll(); applyPhoneVoice(); voiceNote(); diag("hlas hlásek: "+settings.phoneVoice); if(word) spellOut(word); };
+export function openRec() { recMsg(""); renderRec(); $("dlgRec").showModal(); }
+$("recTest").onclick = () => spellOut(R.word || "NOS");
+$("dlgRec").addEventListener("close", () => { if (activeRec) activeRec.r.stop(); activeRec = null; audio.releaseMic(); });
 
-/* ---------- namlouvání celého slova ---------- */
-let wrec=null;   // {W, mr, timer, blob, buf}
-const WREC_MAX=3000;
-function wrecMsg(t){ $("wrecMsg").textContent=t; }
-function renderWordRec(){
-  const W=wrec.W, has=ownWords.has(W);
-  $("wrecWord").textContent=cs(W);
-  $("wrecState").textContent = has ? "Teď se přehrává vaše nahrávka." : (OWNV.has("w_"+W) ? "Teď se přehrává původní nahrávka." : "Teď slovo čte hlas telefonu.");
-  $("wrecOrig").hidden=!has;
-  $("wrecRec").classList.toggle("on",!!wrec.mr);
-  $("wrecRec").textContent = wrec.mr ? "⏹ Zastavit" : (has ? "🎙 Nahrát znovu" : "🎙 Nahrát");
+/* --- namlouvání slov --- */
+let wordsLevel = 1;
+function renderWords() {
+  $("lvChips").replaceChildren(...Object.keys(LEVELS).map(l => h("button", { class: "lv", "aria-pressed": String(+l === wordsLevel), onclick: () => { wordsLevel = +l; renderWords(); } }, l)));
+  $("wordGrid").replaceChildren(...LEVELS[wordsLevel].map(w => h("button", {
+    class: "gw" + (audio.ownWords.has(w) ? " own" : ""), "data-word": w, onclick: () => openWordRec(w) },
+    PICS[w] ? PICS[w] + " " : "", cs(w))));
 }
-function openWordRec(){
-  if(!word) return;
-  playToken++;
-  wrec={W:word};
-  wrecMsg("Ťukněte na Nahrát a řekněte celé slovo zřetelně, přirozeným tempem. Nahrávání se samo zastaví po 3 s.");
+let wrec = null;
+const wrecMsg = t => { $("wrecMsg").textContent = t; };
+function renderWordRec() {
+  const W = wrec.W, has = audio.ownWords.has(W);
+  $("wrecWord").textContent = (PICS[W] ? PICS[W] + " " : "") + cs(W);
+  $("wrecState").textContent = has ? "Teď se přehrává vaše nahrávka." : (OWNV.has("w_" + W) ? "Teď se přehrává nahrávka aplikace." : "Teď slovo čte hlas telefonu.");
+  $("wrecOrig").hidden = !has;
+  $("wrecRec").classList.toggle("on", !!wrec.r);
+  $("wrecRec").textContent = wrec.r ? "⏹ Zastavit" : (has ? "🎙️ Nahrát znovu" : "🎙️ Nahrát");
+}
+export function openWordRec(W) {
+  stopAll(); wrec = { W };
+  wrecMsg("Ťukněte na Nahrát a řekněte celé slovo zřetelně. Nahrávání se samo zastaví po 3 s.");
   renderWordRec(); $("dlgWordRec").showModal();
 }
-function stopWordRec(){ if(!wrec||!wrec.mr) return; clearTimeout(wrec.timer); const mr=wrec.mr; wrec.mr=null; if(mr.state==="recording") setTimeout(()=>mr.stop(),150); renderWordRec(); }
-$("wrecRec").onclick=async()=>{
-  if(wrec.mr){ stopWordRec(); return; }
+$("wrecRec").onclick = async () => {
+  if (wrec.r) { wrec.r.stop(); return; }
   wrecMsg("Připravuji mikrofon…");
-  let s;
-  try{ await ensureAudio(); s=await getMic(); }
-  catch(err){
-    wrecMsg(err&&(err.name==="NotAllowedError"||err.name==="SecurityError")
-      ? "Mikrofon je zablokovaný. V Chromu ťukněte na ikonu vlevo od adresy → Oprávnění → Mikrofon → Povolit."
-      : "Mikrofon se nepodařilo spustit ("+((err&&(err.name||err.message))||"chyba")+").");
-    diag("nahrávání slova: "+((err&&(err.name||err.message))||err)); return;
-  }
-  const W=wrec.W, chunks=[], mr=new MediaRecorder(s);
-  mr.ondataavailable=ev=>{ if(ev.data&&ev.data.size) chunks.push(ev.data); };
-  mr.onstop=async()=>{
-    const blob=new Blob(chunks,{type:mr.mimeType||"audio/webm"});
-    try{
-      await ensureAudio();
-      const buf=await decodeRec(blob,true);
-      if(!buf){ wrecMsg("Nic nebylo slyšet. Mluvte blíž k telefonu a zkuste to znovu."); renderWordRec(); return; }
-      await dbOp("readwrite",st=>st.put(blob,"w:"+W));
-      ownWords.add(W); WREC[W]=buf;
-      diag("namluveno slovo "+W+" ("+buf.duration.toFixed(2)+" s)");
-      wrecMsg("Uloženo. Takhle teď slovo zní. Když se nelíbí, nahrajte ho znovu.");
-      renderWordRec(); await playBuf(buf);
-    }catch(err){ wrecMsg("Nahrávku se nepodařilo zpracovat, zkuste to znovu."); diag("zpracování slova "+W+": "+err.message); renderWordRec(); }
-  };
-  mr.start(); wrec.mr=mr; wrec.timer=setTimeout(stopWordRec,WREC_MAX);
-  wrecMsg("Nahrávám… řekněte „"+W.toLowerCase()+"“."); renderWordRec();
+  let r; try { r = await audio.record(3000); } catch (err) { wrecMsg(audio.micError(err)); diag("mikrofon: " + (err.name || err.message)); return; }
+  const W = wrec.W; wrec.r = r; wrecMsg("Nahrávám… řekněte „" + W.toLowerCase() + "“."); renderWordRec();
+  const blob = await r.done; wrec.r = null;
+  try {
+    const buf = await audio.saveWord(W, blob);
+    if (!buf) { wrecMsg("Nic nebylo slyšet. Mluvte blíž k telefonu a zkuste to znovu."); renderWordRec(); return; }
+    diag("namluveno slovo " + W + " (" + buf.duration.toFixed(2) + " s)");
+    wrecMsg("Uloženo. Takhle teď slovo zní. Když se nelíbí, nahrajte ho znovu.");
+    renderWordRec(); await audio.playBuf(buf);
+  } catch (err) { wrecMsg("Nahrávku se nepodařilo zpracovat, zkuste to znovu."); diag("slovo " + W + ": " + err.message); renderWordRec(); }
 };
-$("wrecPlay").onclick=async()=>{ if(wrec.mr) stopWordRec(); playToken++; await play("w_"+wrec.W); };
-$("wrecOrig").onclick=async()=>{
-  const W=wrec.W;
-  try{ await dbOp("readwrite",st=>st.delete("w:"+W)); }catch(e){ diag("mazání slova "+W+": "+e.message); }
-  ownWords.delete(W); delete WREC[W]; diag("vráceno původní slovo "+W);
-  wrecMsg("Vráceno původní znění."); renderWordRec(); playToken++; play("w_"+W);
-};
-$("dlgWordRec").addEventListener("close",()=>{ stopWordRec(); if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } ensureAudio().finally(render); });
+$("wrecPlay").onclick = () => { if (wrec.r) wrec.r.stop(); stopAll(); sayWord(wrec.W); };
+$("wrecOrig").onclick = async () => { await audio.deleteWord(wrec.W); diag("vráceno původní slovo " + wrec.W); wrecMsg("Vráceno původní znění."); renderWordRec(); sayWord(wrec.W); };
+$("dlgWordRec").addEventListener("close", () => { if (wrec && wrec.r) wrec.r.stop(); audio.releaseMic(); if ($("dlgWords").open) renderWords(); });
 
-/* ---------- start ---------- */
-$("go").onclick=async()=>{
-  await ensureAudio();
-  await loadRecs(); await loadOwnWordList(); pickVoice();
-  $("start").remove(); startTimer(); nextWord();
-  if(!PHONES.some(([k])=>REC[k])) setTimeout(openRec,400);
-  pickVoice(); setTimeout(pickVoice,1500);   // Android načítá hlasy se zpožděním
-};
-renderLevels(); renderModes();
-
-/* zvuk probudit po návratu do aplikace a při každém dotyku (Android vyžaduje gesto) */
-document.addEventListener("visibilitychange",()=>{ if(!document.hidden && ctx) ensureAudio(); });
-addEventListener("pageshow",()=>{ if(ctx) ensureAudio(); });
-document.addEventListener("pointerdown",()=>{ if(ctx && ctx.state!=="running") ensureAudio(); },{capture:true});
-
-/* ---------- diagnostika ---------- */
-$("openDiag").onclick=()=>{ $("dlgSet").close(); renderDiag(); $("dlgDiag").showModal(); };
-function renderDiag(){
-  const info=[
-    "Hláskoun – diagnostika "+new Date().toLocaleString("cs-CZ"),
-    "Prohlížeč: "+navigator.userAgent,
-    "Režim: "+(matchMedia("(display-mode: standalone)").matches?"aplikace na ploše":"prohlížeč"),
-    "Zvuk: "+(ctx?ctx.state:"nespuštěn")+", hlásek načteno: "+Object.keys(REC).length+"/"+PHONES.length+" (mých "+Object.keys(OWNP).length+")",
-    "Hlas slov: "+settings.wordVoice+", hlas hlásek: "+settings.phoneVoice,
-    "Vlastní nahrávky slov: "+ownWords.size+(ownWords.size?" ("+[...ownWords].slice(0,30).join(", ")+")":""),
-    "Hlas telefonu: "+(csVoice?csVoice.name:"žádný český"),
-    "Service worker: "+(navigator.serviceWorker&&navigator.serviceWorker.controller?"aktivní":"ne"),
-    "Úroveň/režim/slovo: "+state.level+" / "+state.mode+" / "+word,
-    "--- záznam ---", ...DIAG.slice(-60)];
-  $("diagText").value=info.join("\n");
+/* --- nastavení --- */
+function voiceNote() {
+  const wv = settings.wordVoice, v = audio.csVoice;
+  const dev = v ? "Hlas telefonu: " + v.name + "." : "Telefon nemá český hlas – použijí se nahrávky aplikace. Nastavení telefonu → Převod textu na řeč → Google → stáhnout češtinu.";
+  $("voiceNote").textContent = wv === "robot" ? "Robotický hlas z nahrávek aplikace. Robot pak nemluví pokyny." :
+    wv === "own" ? "Vaše namluvená slova, jinak nahrávky aplikace, jinak hlas telefonu. " + dev :
+    wv === "recorded" ? "Vaše namluvená slova se nepoužijí. " + dev : dev;
+  const own = audio.PHONES.filter(([k]) => audio.OWNP[k]).length;
+  $("phoneNote").textContent = settings.phoneVoice === "own"
+    ? (own ? `Používá se ${own} vašich hlásek, zbytek výchozí.` : "Zatím nemáte namluvené hlásky – používají se výchozí.")
+    : "Výchozí nahrávky aplikace" + (own ? ` (vašich ${own} hlásek zůstává uloženo).` : ".");
 }
-$("diagCopy").onclick=async()=>{
-  const t=$("diagText"); t.select();
-  try{ await navigator.clipboard.writeText(t.value); $("diagCopy").textContent="✓ Zkopírováno"; }
-  catch(e){ document.execCommand("copy"); $("diagCopy").textContent="✓ Zkopírováno"; }
-  setTimeout(()=>$("diagCopy").textContent="📋 Zkopírovat",2000);
-};
-$("diagClear").onclick=()=>{ DIAG.length=0; store.set("hl-diag",DIAG); renderDiag(); };
+export function openSet() {
+  audio.pickVoice();
+  $("wordVoice").value = settings.wordVoice; $("phoneVoice").value = settings.phoneVoice; $("gap").value = settings.gap;
+  for (const k of ["assim", "lower", "vibrate"]) $(k).checked = settings[k];
+  voiceNote(); $("dlgSet").showModal();
+}
+const sample = () => R.word || "PES";
+$("wordVoice").onchange = e => { settings.wordVoice = e.target.value; saveSettings(); voiceNote(); diag("hlas slov: " + settings.wordVoice); stopAll(); sayWord(sample()); };
+$("phoneVoice").onchange = e => { settings.phoneVoice = e.target.value; saveSettings(); audio.applyPhoneVoice(); voiceNote(); diag("hlas hlásek: " + settings.phoneVoice); stopAll(); spellOut(sample()); };
+$("gap").oninput = e => { settings.gap = +e.target.value; saveSettings(); };
+for (const k of ["assim", "lower", "vibrate"]) $(k).onchange = e => { settings[k] = e.target.checked; saveSettings(); };
 
-/* ---------- install to home screen ---------- */
-if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
-(()=>{
-  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
-  if(standalone) return;
-  const ib=$("install"), hint=$("installHint");
-  const showHint = t => { hint.textContent=t; hint.hidden=false; };
-  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
-  let deferred=null;
-  addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); deferred=e; ib.hidden=false; hint.hidden=true; });
-  addEventListener("appinstalled", ()=>{ ib.hidden=true; showHint("Hotovo, Hláskoun je na ploše."); });
-  ib.onclick=async()=>{
-    if(deferred){ deferred.prompt(); const r=await deferred.userChoice; deferred=null; if(r.outcome==="accepted") ib.hidden=true; return; }
-    showHint(ios
-      ? "Na iPhonu: dole (nebo nahoře) ťukněte na Sdílet ⬆︎ a zvolte „Přidat na plochu“."
-      : "V Chromu ťukněte vpravo nahoře na ⋮ a zvolte „Přidat na plochu“ nebo „Nainstalovat aplikaci“.");
+/* --- diagnostika --- */
+function renderDiag() {
+  const c = audio.ctx;
+  $("diagText").value = [
+    "Hláskoun – diagnostika " + new Date().toLocaleString("cs-CZ"),
+    "Prohlížeč: " + navigator.userAgent,
+    "Režim: " + (matchMedia("(display-mode: standalone)").matches ? "aplikace na ploše" : "prohlížeč"),
+    "Zvuk: " + (c ? c.state : "nespuštěn") + ", hlásek: " + Object.keys(audio.REC).length + "/" + audio.PHONES.length + " (mých " + Object.keys(audio.OWNP).length + ")",
+    "Vlastní slova: " + audio.ownWords.size + (audio.ownWords.size ? " (" + [...audio.ownWords].slice(0, 30).join(", ") + ")" : ""),
+    "Hlas slov: " + settings.wordVoice + ", hlásek: " + settings.phoneVoice + ", hlas telefonu: " + (audio.csVoice ? audio.csVoice.name : "žádný český"),
+    "Service worker: " + (navigator.serviceWorker && navigator.serviceWorker.controller ? "aktivní" : "ne"),
+    "Pokrok: " + JSON.stringify(progress.tier) + ", hvězd " + progress.stars + ", kol " + progress.rounds,
+    "Obrazovka: " + current + (R.game ? ", hra " + R.game + ", slovo " + R.word : ""),
+    "--- záznam ---", ...DIAG.slice(-60)].join("\n");
+}
+$("diagCopy").onclick = async () => {
+  const t = $("diagText"); t.select();
+  try { await navigator.clipboard.writeText(t.value); } catch (e) { document.execCommand("copy"); }
+  $("diagCopy").textContent = "✓ Zkopírováno"; setTimeout(() => $("diagCopy").textContent = "📋 Zkopírovat", 2000);
+};
+$("diagClear").onclick = () => { DIAG.length = 0; store.set("hl-diag", DIAG); renderDiag(); };
+
+/* --- instalace na plochu (jen v koutku pro rodiče) --- */
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+(() => {
+  if (matchMedia("(display-mode: standalone)").matches || navigator.standalone) return;
+  const ib = $("pInstall"), hint = $("installHint");
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  let deferred = null;
+  addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferred = e; ib.hidden = false; });
+  addEventListener("appinstalled", () => { ib.hidden = true; hint.hidden = false; hint.textContent = "Hotovo, Hláskoun je na ploše."; });
+  if (ios || /Android/.test(navigator.userAgent)) ib.hidden = false;
+  ib.onclick = async () => {
+    if (deferred) { deferred.prompt(); const r = await deferred.userChoice; deferred = null; if (r.outcome === "accepted") ib.hidden = true; return; }
+    hint.hidden = false;
+    hint.textContent = ios ? "Ťukněte na Sdílet ⬆︎ a zvolte „Přidat na plochu“." : "V prohlížeči ťukněte na ⋮ (Samsung Internet ≡) a zvolte „Přidat na plochu“ / „Nainstalovat aplikaci“.";
   };
-  // Tlačítko ukážeme vždy na mobilu; když prohlížeč nenabídne instalaci sám, vysvětlí postup.
-  if(ios || /Android/.test(navigator.userAgent)) ib.hidden=false;
 })();
+
+renderGames();
+
+/* Pro testy (tests/s23.js) */
+window.hl = { core, audio, R, GAMES, startGame, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
+  get current() { return current; } };

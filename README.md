@@ -1,63 +1,60 @@
 # Robot Hláskoun
 
-Webová aplikace pro děti, které se učí číst a psát: robot hláskuje slova hlasem rodiče a dítě skládá celé slovo. Cvičí se asi 5 minut denně.
+Webová aplikace pro děti 6–7 let, které se učí číst a psát. Dítě ji používá **samo**: robot říká pokyny nahlas, hry ukazují obrázky a samy poznají správnou odpověď.
 
-## Režimy
+## Hry
 
-- **Slož slovo**: robot slovo vyhláskuje, dítě ho řekne celé.
-- **Najdi hlásku**: dítě pozná první, poslední nebo vnitřní hlásku slova.
-- **Napiš**: robot řekne slovo, dítě ho složí z písmen.
-- **Přečti**: dítě slovo přečte nahlas.
+| | Hra | Co dítě dělá |
+|---|---|---|
+| 👂 | **Poslouchej** | Robot vyhláskuje slovo (p-e-s), dítě ťukne na správný obrázek. |
+| A | **První hláska** | Uslyší slovo (a vidí obrázek), vybere písmeno, kterým začíná. |
+| 🧩 | **Skládej** | Uslyší slovo, skládá ho z písmenek; špatné písmeno se nepřijme. |
+| 📖 | **Čti** | Přečte slovo a ťukne na obrázek; 🔊 slovo přečte, když si neví rady. |
 
-Slova jsou rozdělená do 9 úrovní, od krátkých třípísmenných po slova se shlukem souhlásek. Hláskování umí podle výslovnosti (spodoba znělosti, *věž → v-j-e-š*), a to lze vypnout v nastavení.
+Každé kolo má 5 slov. Za slovo bez chyby je zlatá hvězda, s chybou stříbrná. Po kole bez chyby se hra posune na těžší úroveň, po slabém kole na lehčí. Slova jsou v 9 úrovních (od krátkých třípísmenných po shluky souhlásek), 141 z nich má obrázek (`js/pictures.js`).
+
+## Pro rodiče
+
+Podržte ⚙️ vpravo nahoře 1,5 s. Tam je:
+- **Namluvit hlásky** – hláskování vlastním hlasem,
+- **Namluvit slova** – slovo, které nezní dobře, namluvíte sami (má přednost, jde vrátit),
+- **Nastavení** – hlas pro slova (moje nahrávky / nahrávky aplikace / vždy hlas telefonu / robot) a hlásky, tempo, výslovnost, malá písmena, vibrace,
+- **Pokrok** – hvězdy, kola, úroveň každé hry (jde ručně změnit),
+- **Diagnostika** – záznam pro řešení problémů,
+- **Přidat na plochu**.
+
+Nejlepší hlas telefonu: v Androidu *Převod textu na řeč → Google → stáhnout češtinu*. Robot jím říká i pokyny ke hrám.
+
+Nahrávky, nastavení a pokrok se ukládají jen v tomto telefonu (IndexedDB, `localStorage`). Žádný server není potřeba.
 
 ## Struktura
 
 ```
-index.html        stránka
-css/style.css     vzhled (světlý i tmavý režim)
-js/data.js        slova podle úrovní, popisy úrovní, seznam nahrávek
-js/app.js         logika aplikace
-audio/words/      nahrávky celých slov (Ogg Opus)
-audio/phones/     výchozí nahrávky hlásek
-audio/phrases/    pochvaly a hlášky („správně“, „zkus to znovu“…)
+index.html          obrazovky (domů, hra, oslava) a okna pro rodiče
+css/style.css       vzhled (světlý i tmavý režim)
+js/app.js           hry, obrazovky, koutek pro rodiče (ES modul)
+js/audio.js         zvuk, hlas telefonu, nahrávání (odolné vůči uspání zvuku na Androidu)
+js/core.js          nastavení, pokrok, diagnostika
+js/phonetics.js     hláskování podle výslovnosti
+js/data.js          slova podle úrovní, seznam nahrávek
+js/pictures.js      slova → obrázky (emoji)
+audio/              nahrávky slov, hlásek a pochval (Ogg Opus)
+sw.js, manifest     instalace na plochu a běh bez internetu
+tests/s23.js        test na emulovaném Samsungu Galaxy S23
 ```
 
-Pod každým slovem je **🎙 Namluvit slovo**: když slovo nezní dobře, rodič ho nahraje vlastním hlasem a jeho nahrávka má přednost (lze vrátit původní). V seznamu slov jsou takto namluvená slova označená 🎙.
-
-V **Nastavení** jde zvolit hlas pro celá slova (moje nahrávky / nahrávky aplikace / vždy hlas telefonu / robot) a pro hlásky (moje / výchozí nahrávky aplikace). Vlastní nahrávky se přepnutím nemažou. Nejlepší hlas telefonu: v Androidu *Převod textu na řeč → Google → stáhnout češtinu*.
-
-Hlásky i slova namluvené rodičem se ukládají jen v prohlížeči daného telefonu (IndexedDB), postup a nastavení v `localStorage`. Žádný server není potřeba.
-
-Celá slova bez vlastní nahrávky čte hlas telefonu (Web Speech API, čeština).
-
-## Spuštění
-
-Aplikace musí běžet přes HTTP(S), ne z `file://` (zvuky se stahují přes `fetch`). Lokálně:
+## Spuštění a test
 
 ```bash
 python3 -m http.server 8000
 ```
 
-a otevřít <http://localhost:8000>. Nahrávání mikrofonem funguje jen na `localhost` nebo přes HTTPS.
-
-## Test na Samsungu Galaxy S23
-
 ```bash
 node tests/s23.js
 ```
 
-Otestuje aplikaci na emulovaném Galaxy S23 v Chromu i Samsung Internetu (načtení, zvuky, instalace na plochu, všechny režimy, rozložení na šířku telefonu). S adresou jako parametrem otestuje nasazenou verzi. Snímky obrazovky jsou v `tests/screenshots/`.
+Test projde všechny 4 hry (celá kola, správné i špatné odpovědi), odolnost zvuku, nahrávání, volbu hlasu, všechna okna a obrazovky na 4 velikostech displeje S23, v Chromu i Samsung Internetu. S adresou jako parametrem otestuje nasazenou verzi.
 
-## Nasazení na GitHub Pages
+## Nasazení
 
-V repozitáři *Settings → Pages → Build and deployment*: Source *Deploy from a branch*, větev `main`, složka `/ (root)`. Aplikace pak poběží na `https://<účet>.github.io/<repozitář>/`.
-
-## Přidání slova
-
-1. Doplnit slovo do příslušné úrovně v `LEVELS` v `js/data.js`.
-2. Volitelně přidat nahrávku `audio/words/SLOVO.ogg` (velkými písmeny, s diakritikou) a klíč `w_SLOVO` do `AUDIO_KEYS`. Pokud je to vlastní nahraný hlas, přidat klíč i do `OWNV`, jinak má přednost hlas telefonu.
-
-## Instalace na plochu telefonu
-
-Aplikace je PWA (`manifest.webmanifest`, `sw.js`). Na úvodní obrazovce je tlačítko **Přidat na plochu**: v Chromu na Androidu rovnou nabídne instalaci, na iPhonu ukáže postup přes tlačítko Sdílet. Service worker ukládá stránku a stažené nahrávky do mezipaměti, takže po prvním použití aplikace funguje i bez internetu. Při změně souborů v `SHELL` je dobré zvýšit verzi `CACHE` v `sw.js`.
+GitHub Pages z větve `main` (Settings → Pages → `main` / root): https://bifurk.github.io/Personal_Hlaskoun/

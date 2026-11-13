@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#EAF3F1">
+<meta name="theme-color" content="#F3F7FF">
+<meta name="view-transition" content="same-origin">
 <title>Robot Hláskoun</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
@@ -16,54 +17,90 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<div class="start" id="start">
-  <div class="box">
-    <div class="robot" aria-hidden="true"><div class="antenna"></div><div class="ears"></div>
-      <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
-      <div class="mouth"><i></i><i></i><i></i><i></i><i></i></div></div>
-    <h2>Robot Hláskoun</h2>
-    <p>Hláskuje slova vaším hlasem: na začátku jednou namluvíte hlásky (asi 2 minuty). Celá slova čte hlas telefonu. Cvičte asi 5 minut denně.</p>
-    <button class="btn main" id="go">Začít cvičit</button>
-    <button class="btn install" id="install" hidden>📲 Přidat na plochu</button>
-    <p class="installhint" id="installHint" hidden></p>
-  </div>
-</div>
 
-<div class="app">
-  <header>
-    <h1>Hláskoun</h1>
-    <span class="timer" id="timer" title="Doporučeno asi 5 minut denně">5:00</span>
-    <button class="iconbtn" id="openRec" aria-label="Namluvit hlásky">🎙</button>
-    <button class="iconbtn" id="openList" aria-label="Seznam slov úrovně">☰</button>
-    <button class="iconbtn" id="openSet" aria-label="Nastavení">⚙</button>
+<!-- ========== DOMŮ ========== -->
+<section class="screen" id="home">
+  <header class="topbar">
+    <div class="chip stars" aria-label="Hvězdičky"><span aria-hidden="true">⭐</span><b id="starTotal">0</b></div>
+    <button class="parent-btn" id="parentBtn" aria-label="Pro rodiče – podržte">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><circle class="ring" cx="24" cy="24" r="21"/></svg>
+      <span aria-hidden="true">⚙️</span>
+    </button>
   </header>
-  <nav class="levels" id="levels" aria-label="Úroveň"></nav>
-  <p class="lvnote" id="lvnote"></p>
-  <nav class="modes" id="modes" aria-label="Cvičení"></nav>
-
-  <div class="robot" id="robot" aria-live="polite">
-    <div class="antenna"></div><div class="ears"></div>
-    <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
-    <div class="screen" id="screen"></div>
-    <div class="mouth" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="hero">
+    <div class="robot big" id="robotHome" aria-hidden="true"></div>
+    <p class="bubble" id="homeBubble">Ahoj! Na co si zahrajeme?</p>
   </div>
-  <section class="panel" id="panel"></section>
-</div>
-<div class="actions"><div class="in" id="actions"></div></div>
+  <nav class="games" id="games" aria-label="Hry"></nav>
+  <p class="parent-hint" id="parentHint" hidden>Pro rodiče: podržte ⚙️</p>
+</section>
 
-<dialog id="dlgList"><div class="dlg">
-  <h2 id="listTitle">Úroveň</h2>
-  <p>Zakroužkovaná slova dítě složilo nebo přečetlo. Klepnutím slovo zakroužkujete nebo kroužek zrušíte.</p>
-  <div class="grid" id="grid"></div>
-  <div class="row"><button class="btn" id="resetLv">Smazat kroužky</button><button class="btn main" data-close>Zavřít</button></div>
+<!-- ========== HRA ========== -->
+<section class="screen" id="game" hidden>
+  <header class="topbar">
+    <button class="round-btn" id="homeBtn" aria-label="Domů">🏠</button>
+    <ol class="dots" id="dots" aria-label="Postup"></ol>
+    <button class="round-btn" id="againBtn" aria-label="Zopakovat">🔊</button>
+  </header>
+  <div class="stage" id="stage">
+    <div class="robot" id="robotGame" aria-hidden="true"></div>
+    <div class="prompt" id="prompt" aria-live="polite"></div>
+  </div>
+  <div class="answers" id="answers"></div>
+</section>
+
+<!-- ========== OSLAVA ========== -->
+<section class="screen" id="done" hidden>
+  <div class="confetti" id="confetti" aria-hidden="true"></div>
+  <div class="celebrate">
+    <div class="trophy" aria-hidden="true">🏆</div>
+    <div class="earned" id="earned" aria-label="Získané hvězdičky"></div>
+  </div>
+  <div class="done-actions">
+    <button class="big-btn again" id="playAgain" aria-label="Hrát znovu">🔁</button>
+    <button class="big-btn home" id="goHome" aria-label="Domů">🏠</button>
+  </div>
+</section>
+
+<!-- ========== PRO RODIČE ========== -->
+<dialog id="dlgParent" class="sheet"><div class="dlg">
+  <h2>Pro rodiče</h2>
+  <div class="menu">
+    <button class="menu-item" id="pInstall" hidden><span>📲</span>Přidat na plochu</button>
+    <button class="menu-item" id="pRec"><span>🎙️</span>Namluvit hlásky</button>
+    <button class="menu-item" id="pWords"><span>🗣️</span>Namluvit slova</button>
+    <button class="menu-item" id="pSet"><span>⚙️</span>Nastavení hlasu a hry</button>
+    <button class="menu-item" id="pDiag"><span>🩺</span>Diagnostika</button>
+  </div>
+  <h3>Pokrok</h3>
+  <div class="progress-list" id="progressList"></div>
+  <p class="note" id="installHint" hidden></p>
+  <div class="row"><button class="btn main" data-close>Zpět ke hře</button></div>
 </div></dialog>
 
 <dialog id="dlgRec"><div class="dlg">
-  <h2>Namluvte hlásky</h2>
-  <p>Ťukněte na hlásku a řekněte ji. Nahrávání se samo zastaví a hlásku vám přehraje. Jen hlásku, bez samohlásky: „sss“, ne „es“, „mmm“, ne „em“. U p, t, k, b, d jen krátký ráz. Hlásky se uloží v tomto telefonu.</p>
+  <h2>Namluvit hlásky</h2>
+  <p>Ťukněte na hlásku a řekněte ji – jen hlásku, bez samohlásky: „sss“, ne „es“. U p, t, k, b, d jen krátký ráz.</p>
   <p id="recMsg" class="recmsg" hidden></p>
   <div class="recgrid" id="recGrid"></div>
   <div class="row"><button class="btn" id="recTest">▶ Zkusit slovo</button><button class="btn main" data-close>Hotovo</button></div>
+</div></dialog>
+
+<dialog id="dlgWords"><div class="dlg">
+  <h2>Namluvit slova</h2>
+  <p>Když slovo nezní dobře, ťukněte na něj a namluvte ho. 🎙️ = namluveno vámi, 🖼️ = slovo s obrázkem.</p>
+  <nav class="lvchips" id="lvChips" aria-label="Úroveň"></nav>
+  <div class="grid" id="wordGrid"></div>
+  <div class="row"><button class="btn main" data-close>Hotovo</button></div>
+</div></dialog>
+
+<dialog id="dlgWordRec"><div class="dlg">
+  <h2>Namluvit slovo</h2>
+  <div class="wrecword" id="wrecWord"></div>
+  <p id="wrecState"></p>
+  <p id="wrecMsg" class="recmsg"></p>
+  <div class="row"><button class="btn main" id="wrecRec">🎙️ Nahrát</button><button class="btn" id="wrecPlay">▶ Přehrát</button></div>
+  <div class="row"><button class="btn" id="wrecOrig" hidden>↺ Vrátit původní</button><button class="btn" data-close>Hotovo</button></div>
 </div></dialog>
 
 <dialog id="dlgSet"><div class="dlg">
@@ -82,30 +119,21 @@
     </select></div>
   <div class="set"><label for="gap">Tempo hláskování<small>Pauza mezi hláskami</small></label><input type="range" id="gap" min="150" max="1200" step="50"></div>
   <div class="set"><label for="assim">Hláskovat podle výslovnosti<small>věž → v-j-e-š, včela → f-č-e-l-a</small></label><input type="checkbox" id="assim"></div>
-  <div class="set"><label for="letters">Ukazovat písmena při hláskování<small>Vypnuto: dítě jen poslouchá</small></label><input type="checkbox" id="letters"></div>
   <div class="set"><label for="lower">Malá písmena<small>Místo velkých tiskacích</small></label><input type="checkbox" id="lower"></div>
-  <div class="set"><label>Diagnostika<small>Když něco nefunguje, pošlete záznam vývojáři</small></label><button class="btn" id="openDiag" style="flex:0 0 auto;min-height:44px;padding:4px 14px">Otevřít</button></div>
+  <div class="set"><label for="vibrate">Vibrace<small>Při správné a špatné odpovědi</small></label><input type="checkbox" id="vibrate"></div>
   <div class="row"><button class="btn main" data-close>Hotovo</button></div>
-</div></dialog>
-
-<dialog id="dlgWordRec"><div class="dlg">
-  <h2>Namluvit slovo</h2>
-  <div class="wrecword" id="wrecWord"></div>
-  <p id="wrecState"></p>
-  <p id="wrecMsg" class="recmsg"></p>
-  <div class="row"><button class="btn main" id="wrecRec">🎙 Nahrát</button><button class="btn" id="wrecPlay">▶ Přehrát</button></div>
-  <div class="row"><button class="btn" id="wrecOrig" hidden>↺ Vrátit původní</button><button class="btn" data-close>Hotovo</button></div>
 </div></dialog>
 
 <dialog id="dlgDiag"><div class="dlg">
   <h2>Diagnostika</h2>
   <p>Zkopírujte text a pošlete ho do chatu s Claudem. Neobsahuje nahrávky ani osobní údaje.</p>
   <textarea id="diagText" readonly rows="12"></textarea>
-  <div class="row"><button class="btn" id="diagClear">Smazat záznam</button><button class="btn main" id="diagCopy">📋 Zkopírovat</button></div>
-  <div class="row"><button class="btn" data-close>Zavřít</button></div>
+  <div class="row"><button class="btn" id="diagClear">Smazat záznam</button><button class="btn" id="diagCopy">📋 Zkopírovat</button></div>
+  <div class="row"><button class="btn main" data-close>Zavřít</button></div>
 </div></dialog>
 
 <script src="js/data.js"></script>
-<script src="js/app.js"></script>
+<script src="js/pictures.js"></script>
+<script type="module" src="js/app.js"></script>
 </body>
 </html>
