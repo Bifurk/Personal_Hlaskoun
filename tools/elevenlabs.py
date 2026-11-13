@@ -14,13 +14,9 @@ import argparse, json, os, re, subprocess, sys, time, unicodedata, urllib.reques
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 API = "https://api.elevenlabs.io/v1"
 
-# Texty pro samotné hlásky. Souhlásky jako protažený zvuk / krátký ráz – výsledek je nutné poslechnout.
-PHONES = {
-    "a": "a", "á": "á", "e": "e", "é": "é", "i": "i", "í": "í", "o": "o", "ó": "ó", "u": "u", "ú": "ú",
-    "m": "mmm", "n": "nnn", "ň": "ňňň", "l": "lll", "r": "rrr", "ř": "řřř", "s": "sss", "z": "zzz",
-    "š": "ššš", "ž": "žžž", "c": "ccc", "č": "ččč", "j": "jjj", "v": "vvv", "f": "fff", "h": "hhh",
-    "ch": "chchch", "p": "p", "b": "b", "t": "t", "d": "d", "ť": "ť", "ď": "ď", "k": "k", "g": "g",
-}
+# Texty pro samotné hlásky: jen jedno písmeno (uživatel nechce protahované „sss“). Výsledek je nutné poslechnout.
+PHONES = {k: k for k in ["a", "á", "e", "é", "i", "í", "o", "ó", "u", "ú", "m", "n", "ň", "l", "r", "ř", "s", "z",
+                          "š", "ž", "c", "č", "j", "v", "f", "h", "ch", "p", "b", "t", "d", "ť", "ď", "k", "g"]}
 # Věty, které aplikace říká (klíč = název souboru v phrases/)
 PHRASES = {
     "ok_spravne": "Správně!", "ok_vyborne": "Výborně!", "ok_super": "Super!", "ok_bravo": "Bravo!",
@@ -69,7 +65,7 @@ def to_ogg(mp3, out):
     os.makedirs(os.path.dirname(out), exist_ok=True)
     # ořez ticha na začátku a konci, mono, Opus 32 kb/s (stejně jako ostatní nahrávky)
     p = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", "pipe:0", "-af",
-                        "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse",
+                        "silenceremove=start_periods=1:start_threshold=-55dB,areverse,silenceremove=start_periods=1:start_threshold=-55dB,areverse",
                         "-ac", "1", "-c:a", "libopus", "-b:a", "32k", out], input=mp3)
     if p.returncode: sys.exit("ffmpeg selhal: " + out)
 
@@ -77,6 +73,7 @@ def to_ogg(mp3, out):
 def main():
     a = argparse.ArgumentParser()
     a.add_argument("--voice-id"); a.add_argument("--name", default="hanka")
+    a.add_argument("--out", help="jiná výstupní složka (např. pro zkušební varianty mimo repozitář)")
     a.add_argument("--only", choices=["sample", "phones", "phrases", "words", "all"], default="sample")
     a.add_argument("--model", default="eleven_multilingual_v2")
     a.add_argument("--stability", type=float, default=0.5); a.add_argument("--similarity", type=float, default=0.75)
@@ -89,7 +86,7 @@ def main():
             print(m["model_id"], "-", m.get("name"), "| cs" if any(l.get("language_id") == "cs" for l in m.get("languages", [])) else "")
         return
     if not o.voice_id: sys.exit("Chybí --voice-id")
-    base = os.path.join(ROOT, "audio/voices", o.name)
+    base = o.out or os.path.join(ROOT, "audio/voices", o.name)
     jobs = []
     if o.only in ("sample", "phones", "all"): jobs += [("phones", k, t) for k, t in PHONES.items()]
     if o.only in ("sample",): jobs += [("words", w, w.lower()) for w in SAMPLE_WORDS] + [("phrases", "ok_spravne", PHRASES["ok_spravne"])]
