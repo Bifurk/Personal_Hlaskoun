@@ -1,0 +1,53 @@
+{
+ "words": [
+  "BÝK",
+  "KŮŇ",
+  "PES",
+  "VČELA",
+  "ČEPICE",
+  "ŽÁBA"
+ ],
+ "phones": [
+  "a",
+  "b",
+  "c",
+  "ch",
+  "d",
+  "e",
+  "f",
+  "g",
+  "h",
+  "i",
+  "j",
+  "k",
+  "l",
+  "m",
+  "n",
+  "o",
+  "p",
+  "r",
+  "s",
+  "t",
+  "u",
+  "v",
+  "z",
+  "á",
+  "é",
+  "í",
+  "ó",
+  "ú",
+  "č",
+  "ď",
+  "ň",
+  "ř",
+  "š",
+  "ť",
+  "ž"
+ ],
+ "phrases": [
+  "ok_spravne"
+ ],
+ "name": "hanka",
+ "voice_id": "12CHcREbuPdJY02VY7zT",
+ "model": "eleven_multilingual_v2"
+}
