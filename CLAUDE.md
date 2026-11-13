@@ -38,3 +38,11 @@ Jde o emulaci v Chromiu, ne o skutečný telefon – u věcí, které emulace ne
 - Uživatel komunikuje česky; texty v aplikaci jsou česky.
 - Při každé změně souborů aplikace zvýšit verzi `CACHE` v `sw.js` (a nové soubory přidat do `SHELL`), jinak telefon může držet starou verzi.
 - Nahrávky: `audio/words/SLOVO.ogg` (velkými, s diakritikou, NFC), klíče v `AUDIO_KEYS` v `js/data.js`.
+
+## Rozpracováno: hlas Hanka (ElevenLabs) pro celou aplikaci
+
+Uživatel chce místo svého hlasu používat hlas **Hanka** z ElevenLabs pro **vše**: slova, hlásky, pochvaly i pokyny robota.
+- API klíč je v nastavení prostředí jako `ELEVENLABS_API_KEY` (nikdy ho nevypisovat, neukládat do repozitáře ani neposílat jinam než na api.elevenlabs.io; repozitář je veřejný). Uživatel nechce klíč na GitHubu.
+- Generování: `tools/elevenlabs.py` (výstup `audio/voices/hanka/{words,phones,phrases}/*.ogg` + `manifest.json`). ID hlasu dodá uživatel.
+- Postup: 1) `--models` (ověřit klíč, vybrat model s češtinou), 2) `--only sample` → poslat uživateli hlásky a pár slov k poslechu (SendUserFile), hlavně jestli souhlásky znějí jako hláska („sss“, krátké „p“), ne jako název písmene („es“, „pé“); případně upravit texty v `PHONES`, 3) po schválení `--only all`.
+- Pak v aplikaci: nová volba hlasu „Hanka“ jako výchozí pro slova, hlásky, pochvaly (`phrases/ok_*`, `no_*`) i pokyny her (`g_*`, `hello`, `done_*`) místo hlasu telefonu; vlastní nahrávky uživatele zachovat jako volitelné. Doplnit `SHELL`/cache, testy v `tests/s23.js` (odkud se co přehraje), otestovat na S23 lokálně i živě.
