@@ -160,6 +160,25 @@ function serve() {
       await page.tap("#homeBtn"); await page.waitForTimeout(300);
     }
 
+    /* ---------- odchod z aplikace: zvuk musí hned ztichnout ---------- */
+    const bg = await ev(async () => {
+      const setHidden = v => { Object.defineProperty(document, "hidden", { value: v, configurable: true });
+        Object.defineProperty(document, "visibilityState", { value: v ? "hidden" : "visible", configurable: true });
+        document.dispatchEvent(new Event("visibilitychange")); };
+      let steps = 0; const run = hl.audio.spellOut("POLENO", () => steps++);
+      await new Promise(r => setTimeout(r, 300));
+      setHidden(true);
+      const at = steps; await new Promise(r => setTimeout(r, 1500));
+      const after = steps, state = hl.audio.ctx.state; await run;
+      setHidden(false); await new Promise(r => setTimeout(r, 300));
+      await hl.audio.ensureAudio();
+      return { stopped: after === at, state, back: hl.audio.ctx.state };
+    });
+    check("odchod z aplikace: hláskování se zastaví", bg.stopped);
+    check("odchod z aplikace: zvuk ztichne", bg.state === "suspended", bg.state);
+    check("návrat do aplikace: zvuk zase běží", bg.back === "running", bg.back);
+    await notHung("po návratu do aplikace se hláskuje", () => hl.audio.spellOut("NOS"));
+
     /* ---------- namlouvání hlásek ---------- */
     await ev(() => hl.openParent()); await page.tap("#pRec"); await page.waitForSelector("#dlgRec[open]");
     for (let i = 0; i < 6; i++) { await page.locator(".rk").nth(i).tap(); await page.waitForTimeout(2300); }

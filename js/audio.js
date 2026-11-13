@@ -226,6 +226,12 @@ export const micError = err => err && (err.name === "NotAllowedError" || err.nam
   : (err && err.name === "NotSupported") ? err.message : "Mikrofon se nepodařilo spustit (" + ((err && (err.name || err.message)) || "chyba") + ").";
 
 /* probudit zvuk po návratu do aplikace a při dotyku (Android vyžaduje gesto) */
-document.addEventListener("visibilitychange", () => { if (!document.hidden && ctx) ensureAudio(); });
+/* Odchod z aplikace (jiná aplikace, zamčení): okamžitě ztišit – robot nesmí mluvit na pozadí */
+export function silence() {
+  stopAll();
+  if (ctx && ctx.state === "running") ctx.suspend().catch(() => {});   // utne i právě hrající nahrávku; po návratu ensureAudio() probudí
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden) silence(); else if (ctx) ensureAudio(); });
+addEventListener("pagehide", silence);
 addEventListener("pageshow", () => { if (ctx) ensureAudio(); });
 document.addEventListener("pointerdown", () => { if (ctx && ctx.state !== "running") ensureAudio(); }, { capture: true });
