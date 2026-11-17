@@ -30,4 +30,18 @@ const PICS = {
   // úroveň 9
   BOBR:"🦫", ČERV:"🪱", ČERT:"😈", DÉŠŤ:"🌧️", DORT:"🎂", KUFR:"🧳", LIST:"🍃", MOST:"🌉", TERČ:"🎯",
   VÍTR:"🌬️", PĚST:"✊", KOST:"🦴",
+  // doplněno: slova s obrázkem pro hry Poslouchej a Čti
+  LEV:"🦁",   NŮŽ:"🔪",   ČAJ:"🍵",   SŮL:"🧂",   LÉK:"💊",   ŠÍP:"🏹",   KOŠ:"🧺",   MUŽ:"🧔",
+  OKO:"👁️",   UCHO:"👂",   MYŠ:"🐭",   PÁV:"🦚",   LOĎ:"⛵",   KÁVA:"☕",   KOLO:"🚲",   AUTO:"🚗",
+  MÉĎA:"🧸",   DÝNĚ:"🎃",   DUHA:"🌈",   LAMA:"🦙",   PERO:"🖊️",   HOUBA:"🍄",   SALÁT:"🥗",   MELOUN:"🍉",
+  PAVOUK:"🕷️",   LIŠKA:"🦊",   MEDVĚD:"🐻",   ZEBRA:"🦓",   TUČŇÁK:"🐧",   KOČKA:"🐈",   KACHNA:"🦆",   KOHOUT:"🐓",
+  OVCE:"🐑",   DELFÍN:"🐬",   ŽELVA:"🐢",   BONBON:"🍬",   NŮŽKY:"✂️",   TUŽKA:"✏️",   BATOH:"🎒",   OHEŇ:"🔥",
+  RAKETA:"🚀",   OKURKA:"🥒",   PAPRIKA:"🫑",   OPICE:"🐒",   ŽIRAFA:"🦒",   SUŠENKA:"🍪",   PONOŽKA:"🧦",   HODINKY:"⌚",
+  TELEVIZE:"📺",   POČÍTAČ:"💻",   LETADLO:"✈️",   AUTOBUS:"🚌",   SANITKA:"🚑",   MOTORKA:"🏍️",   KOLOBĚŽKA:"🛴",   PAPOUŠEK:"🦜",
+  VEVERKA:"🐿️",   VELRYBA:"🐳",   CHOBOTNICE:"🐙",   KUKUŘICE:"🌽",   ČOKOLÁDA:"🍫",   LÍZÁTKO:"🍭",   VAJÍČKO:"🥚",   RUKAVICE:"🧤",
+  PASTELKA:"🖍️",   VLAK:"🚂",   SLON:"🐘",   KLAUN:"🤡",   KRÁL:"🤴",   HVĚZDA:"⭐",   KLÍČ:"🔑",   STROM:"🌳",
+  DRAK:"🐉",   MRAK:"☁️",   KRAB:"🦀",   ŠNEK:"🐌",   STAN:"⛺",   SLUNCE:"☀️",   TŘEŠNĚ:"🍒",   CHLÉB:"🍞",
+  BLESK:"⚡",   SNÍH:"❄️",   TRAKTOR:"🚜",   TRUBKA:"🎺",   KLOBOUK:"🎩",   PRSTEN:"💍",   MRKEV:"🥕",   HRUŠKA:"🍐",
+  JABLKO:"🍎",   KLOKAN:"🦘",   VRTULNÍK:"🚁",   BRAMBORA:"🥔",   BROKOLICE:"🥦",   ZMRZLINA:"🍦",   KLADIVO:"🔨",   TYGR:"🐅",
+  MÍSA:"🥣",   SOVA:"🦉",   VÁZA:"🏺",   PÁNEV:"🍳",   PŘÍBOR:"🍴", 
 };

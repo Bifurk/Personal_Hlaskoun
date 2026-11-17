@@ -73,6 +73,34 @@ function serve() {
     check("domů: žádný dlouhý text pro dítě", await ev(() => document.querySelector("#home").innerText.replace(/\s+/g, " ").length < 120),
       await ev(() => document.querySelector("#home").innerText.replace(/\s+/g, " ").length + " znaků"));
 
+    /* ---------- slova s obrázky ---------- */
+    const pics = await ev(() => {
+      const all = new Set(Object.values(LEVELS).flat()), words = Object.keys(PICS);
+      const zwj = words.filter(w => /\u200d/.test(PICS[w]));
+      const notInLevels = words.filter(w => !all.has(w));
+      const sizes = hl.GAMES.listen.tiers.map(t => hl.tierPool("listen", hl.GAMES.listen.tiers.indexOf(t)).length);
+      // emoji musí mít v písmu telefonu barevný obrázek (ne prázdný čtvereček) – změří se šířka vykreslení
+      const c = document.createElement("canvas").getContext("2d"); c.font = "32px sans-serif";
+      const tofu = c.measureText("\u{10FFFF}").width;
+      const blank = words.filter(w => Math.abs(c.measureText(PICS[w]).width - tofu) < 0.5);
+      return { n: words.length, zwj, notInLevels, sizes, blank };
+    });
+    check("obrázků je aspoň 240", pics.n >= 240, `${pics.n}`);
+    check("každé slovo s obrázkem je v seznamu slov", pics.notInLevels.length === 0, pics.notInLevels.join(", "));
+    check("obrázky bez složených emoji (ZWJ)", pics.zwj.length === 0, pics.zwj.join(", "));
+    check("Poslouchej/Čti: každá úroveň má aspoň 20 slov, první aspoň 30", pics.sizes.every(n => n >= 20) && pics.sizes[0] >= 30, pics.sizes.join(" / "));
+    check("všechny obrázky jdou vykreslit", pics.blank.length === 0, pics.blank.join(", "));
+    const sayGate = await ev(() => {
+      const silent = Object.values(LEVELS).flat().filter(w => !AUDIO_KEYS.has("w_" + w));
+      const inFirst = hl.tierPool("first", 0).filter(w => silent.includes(w)), inBuild = hl.tierPool("build", 0).filter(w => silent.includes(w));
+      hl.audio._setVoice({ name: "test", lang: "cs-CZ" });
+      const withTts = hl.tierPool("build", 0).filter(w => silent.includes(w)).length;
+      hl.audio._setVoice(null);
+      return { silent: silent.length, inFirst: inFirst.length, inBuild: inBuild.length, withTts };
+    });
+    check("slova bez nahrávky se bez hlasu telefonu nenabízí ve hrách, kde musí zaznít", sayGate.inFirst === 0 && sayGate.inBuild === 0, JSON.stringify(sayGate));
+    check("s hlasem telefonu se nová slova nabízí i tam", sayGate.withTts > 0, JSON.stringify(sayGate));
+
     /* ---------- koutek pro rodiče: zámek ---------- */
     await page.tap("#parentBtn");
     await page.waitForTimeout(300);

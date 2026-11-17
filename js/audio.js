@@ -88,6 +88,8 @@ export function ttsSay(text, rate = 0.85) {
   });
 }
 const canTts = () => settings.wordVoice !== "robot" && csVoice;
+/** Umí aplikace slovo vyslovit? (nahrávka aplikace, moje nahrávka, nebo hlas telefonu) */
+export const canSay = W => AUDIO_KEYS.has("w_" + W) || ownWords.has(W) || !!(csVoice && settings.wordVoice !== "robot");
 
 /* ---------- moje nahrávky (IndexedDB „hlaskoun“ / „rec“: hlásky pod klíčem „a“, „ch“…, slova pod „w:SLOVO“) ---------- */
 let dbp = null;

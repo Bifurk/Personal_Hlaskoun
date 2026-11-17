@@ -33,6 +33,7 @@ Jde o emulaci v Chromiu, ne o skutečný telefon – u věcí, které emulace ne
 - Když uživatel hlásí problém z telefonu: požádat ho o text z **Pro rodiče (podržet ⚙️) → Diagnostika → Zkopírovat**.
 - **Postup úrovní a výběr slov** (`js/app.js`): na vyšší úroveň jen po kole 5/5 bez chyby **a** když dítě hrálo ≥ 80 % slov současné úrovně (`ADVANCE_COVERAGE`); po kole ≤ 2 hvězdy o úroveň níž. Každé slovo má statistiku `progress.words[hra][SLOVO]` (n, ok, bad, last); výběr je vážený – naposledy chybná slova ×8, chybující ×5/×2,5, nehraná ×3, zvládnutá ×0,5. Rodič vidí přehled v okně „Pokrok po slovech“ (klepnutí na název hry v koutku pro rodiče). Testy to ověřují.
 - Nové slovo s obrázkem: doplnit do `js/pictures.js` (emoji do verze 13, bez ZWJ), stejný obrázek pro dvě slova se v jedné otázce nesejde.
+- Hry Poslouchej a Čti používají jen slova s obrázkem (242 slov; dalších 96 slov bylo přidáno do `LEVELS` jen kvůli obrázkům a **nemají nahrávku aplikace** – čte je hlas telefonu; `audio.canSay()` je bez hlasu telefonu vyřadí z her První hláska a Skládej). Při generování hlasu Hanka se nahrají i ona (skript bere `LEVELS`).
 
 ## Poznámky
 
