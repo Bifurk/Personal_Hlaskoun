@@ -34,7 +34,9 @@ export const saveSettings = () => store.set("hl-settings", settings);
 
 /* ---------- pokrok ----------
    tier: obtížnost každé hry, stars: hvězdy celkem, rounds: odehraná kola, last: poslední slova (aby se neopakovala) */
-export const progress = Object.assign({ tier: {}, stars: 0, rounds: 0, today: {}, last: {} }, store.get("hl-progress2", {}));
+/* words[hra][SLOVO] = { n: kolikrát hráno, ok: bez chyby, bad: s chybou, last: 1/0 poslední výsledek, t: čas } */
+export const progress = Object.assign({ tier: {}, stars: 0, rounds: 0, today: {}, last: {}, words: {} }, store.get("hl-progress2", {}));
+if (!progress.words) progress.words = {};
 export const saveProgress = () => store.set("hl-progress2", progress);
 export function todayCount() { const d = new Date().toISOString().slice(0, 10); return progress.today[d] || 0; }
 export function addToday(n) {

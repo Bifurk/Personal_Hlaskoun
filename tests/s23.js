@@ -130,17 +130,54 @@ function serve() {
       const res = await ev(() => hl.R.results);
       check(`${g}: chyba na 1. slově = stříbrná hvězda, ostatní zlaté`, res.length === 5 && res[0] === false && res.slice(1).every(Boolean), JSON.stringify(res));
       check(`${g}: hvězdy připsané`, await ev(() => hl.core.progress.stars) === starsBefore + 4);
+      const st = await ev(([g, ws]) => ws.map(w => hl.core.progress.words[g]?.[w]), [g, words]);
+      check(`${g}: výsledky slov uložené (1. slovo chyba, ostatní správně)`, st.every(Boolean) && st[0].bad === 1 && st[0].last === 0 && st.slice(1).every(x => x.ok >= 1 && x.last === 1),
+        JSON.stringify(st.map(x => x && [x.ok, x.bad, x.last])));
       if (g === "listen") await page.waitForTimeout(700), await shot("4-oslava");
     }
     check("obtížnost se po 4/5 nezměnila", await ev(ids => ids.every(g => hl.tierOf(g) === 0), GAME_IDS));
-    // 5/5 → těžší úroveň
-    await ev(() => hl.startGame("read")); await page.waitForFunction(() => hl.current === "game" && hl.R.word);
-    for (let k = 0; k < 5; k++) { await answer("read", false); await page.waitForFunction(k => hl.R.i > k || hl.current === "done", k, { timeout: 12000 }).catch(() => {}); }
-    await page.waitForFunction(() => hl.current === "done", null, { timeout: 8000 }).catch(() => {});
-    check("5/5 → hra se posune na těžší úroveň", await ev(() => hl.tierOf("read")) === 1);
+    // postup: jen kolo 5/5 A aspoň 80 % slov úrovně už hraných
+    const playRound = async (g, wrongFirst) => {
+      await ev(g => hl.startGame(g), g); await page.waitForFunction(() => hl.current === "game" && hl.R.word);
+      for (let k = 0; k < 5; k++) { await answer(g, wrongFirst && k === 0); await page.waitForFunction(k => hl.R.i > k || hl.current === "done", k, { timeout: 12000 }).catch(() => {}); }
+      await page.waitForFunction(() => hl.current === "done", null, { timeout: 8000 }).catch(() => {});
+    };
+    const cov0 = await ev(() => hl.coverage("read"));
+    check("pokrytí úrovně se počítá", cov0.seen >= 5 && cov0.total > 5, JSON.stringify(cov0));
+    await playRound("read", false);
+    const cov1 = await ev(() => hl.coverage("read"));
+    check("5/5, ale hráno < 80 % slov → úroveň zůstává", cov1.pct >= 0.8 || await ev(() => hl.tierOf("read")) === 0, JSON.stringify(cov1));
+    // dohrát pokrytí na ≥ 80 % (zapsat jako hraná slova), pak kolo 4/5 → stále bez postupu
+    await ev(() => { const pool = hl.tierPool("read", 0), need = Math.ceil(pool.length * 0.8);
+      for (const w of pool.slice(0, need)) { const all = hl.core.progress.words.read = hl.core.progress.words.read || {}; all[w] = all[w] || { n: 1, ok: 1, bad: 0, last: 1 }; } hl.core.saveProgress(); });
+    await playRound("read", true);
+    check("≥ 80 % slov, ale kolo s chybou (4/5) → úroveň zůstává", await ev(() => hl.tierOf("read")) === 0);
+    await playRound("read", false);
+    check("≥ 80 % slov a kolo 5/5 → postup na těžší úroveň", await ev(() => hl.tierOf("read")) === 1);
+    // výběr slov: naposledy chybná slova častěji
+    const freq = await ev(() => { const g = "listen", pool = hl.tierPool(g, 0), bad = pool[0];
+      const all = hl.core.progress.words[g] = hl.core.progress.words[g] || {};
+      for (const w of pool) all[w] = { n: 2, ok: 2, bad: 0, last: 1 };
+      all[bad] = { n: 2, ok: 0, bad: 2, last: 0 };
+      let hitBad = 0, hitOther = 0; const other = pool[1];
+      for (let k = 0; k < 200; k++) { const ws = hl.chooseWords(g); if (ws.includes(bad)) hitBad++; if (ws.includes(other)) hitOther++; }
+      return { hitBad, hitOther, size: pool.length }; });
+    check("chybné slovo se nabízí výrazně častěji než zvládnuté", freq.hitBad > 150 && freq.hitBad > freq.hitOther * 3, JSON.stringify(freq));
     check("tlačítko Hrát znovu spustí stejnou hru", await page.tap("#playAgain").then(() => page.waitForFunction(() => hl.current === "game" && hl.R.game === "read", null, { timeout: 8000 })).then(() => true, () => false));
     await page.tap("#homeBtn"); await page.waitForTimeout(500);
     check("🏠 vrátí domů", await ev(() => hl.current === "home"));
+
+    /* ---------- přehled pro rodiče: slova správně / špatně ---------- */
+    await ev(() => hl.openParent()); await page.waitForSelector("#dlgParent[open]");
+    check("pokrok: u hry je pokrytí slov úrovně", /\d+\/\d+ slov/.test(await page.textContent("#progressList")));
+    await page.locator('#progressList [data-stats="listen"]').tap(); await page.waitForSelector("#dlgStats[open]");
+    const badW = await ev(() => hl.tierPool("listen", 0)[0]);
+    check("přehled: chybné slovo je v sekci Procvičit", await page.locator(`#statsBody .st-row.bad[data-word="${badW}"]`).count() === 1);
+    check("přehled: počty ✓/✗ u slov", /✓ \d+/.test(await page.textContent("#statsBody")) && /✗ \d+/.test(await page.textContent("#statsBody")));
+    await page.locator("#statsTabs button", { hasText: "Čti" }).tap();
+    check("přehled: přepnutí na jinou hru", /Úroveň 2\//.test(await page.textContent("#statsBody")));
+    await shot("8-prehled-slov");
+    await ev(() => { for (const d of document.querySelectorAll("dialog[open]")) d.close(); });
 
     /* ---------- odolnost zvuku (Android uspí AudioContext) ---------- */
     await suspend();
@@ -250,7 +287,7 @@ function serve() {
 
     /* ---------- audit oken a obrazovek na různých velikostech ---------- */
     const DIALOGS = { "#dlgParent": "pro rodiče", "#dlgSet": "nastavení", "#dlgRec": "namlouvání hlásek", "#dlgWords": "namluvit slova",
-      "#dlgWordRec": "namlouvání slova", "#dlgDiag": "diagnostika" };
+      "#dlgWordRec": "namlouvání slova", "#dlgDiag": "diagnostika", "#dlgStats": "přehled slov" };
     const allDialogs = await ev(() => [...document.querySelectorAll("dialog")].map(d => "#" + d.id));
     check("audit zná všechna okna aplikace", allDialogs.every(id => DIALOGS[id]), allDialogs.filter(id => !DIALOGS[id]).join(", "));
     for (const [w, hgt] of SIZES) {
@@ -258,7 +295,7 @@ function serve() {
       for (const [sel, name] of Object.entries(DIALOGS)) {
         await ev(sel => ({ "#dlgParent": () => hl.openParent(), "#dlgSet": () => hl.openSet(), "#dlgRec": () => hl.openRec(),
           "#dlgWords": () => document.querySelector("#pWords").click(), "#dlgWordRec": () => hl.openWordRec("BÝK"),
-          "#dlgDiag": () => document.querySelector("#pDiag").click() })[sel](), sel);
+          "#dlgDiag": () => document.querySelector("#pDiag").click(), "#dlgStats": () => hl.openStats("listen") })[sel](), sel);
         await page.waitForTimeout(200);
         const r = await ev(sel => {
           const d = document.querySelector(sel), dr = d.getBoundingClientRect();
@@ -274,11 +311,13 @@ function serve() {
           }
           d.querySelector(".dlg").scrollTop = 0;
           const fits = dr.top >= 0 && dr.bottom <= innerHeight && dr.right <= innerWidth && d.scrollWidth <= d.clientWidth + 1;
-          return { closeOk, close: close.map(b => b.textContent.trim()).join("/"), unreachable, fits };
+          const junk = (d.innerText.match(/null|undefined|NaN|\[object/g) || []).join(",");
+          return { junk, closeOk, close: close.map(b => b.textContent.trim()).join("/"), unreachable, fits };
         }, sel);
         check(`${w}×${hgt} ${name}: ${r.close} vidět bez posouvání`, r.closeOk);
         check(`${w}×${hgt} ${name}: vše ovladatelné je dosažitelné`, r.unreachable.length === 0, r.unreachable.join(", "));
         check(`${w}×${hgt} ${name}: okno se vejde na obrazovku`, r.fits);
+        check(`${w}×${hgt} ${name}: žádný technický text (null, [object…)`, !r.junk, r.junk);
         if (hgt === 600 || w === 320) await shot(`menu-${w}x${hgt}-${sel.slice(4)}`);
         await ev(() => { for (const d of document.querySelectorAll("dialog[open]")) d.close(); });
       }

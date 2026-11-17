@@ -246,3 +246,19 @@ body.long-word .bank { gap: 8px; }
   body.long-word #game .robot { display: none; }
   body.long-word .word-row .ltr { min-width: 32px; height: 46px; font-size: 1.5rem; }
 }
+/* pokrok pro rodiče */
+.link-btn { text-align: left; color: var(--robot); font-weight: 800; padding: 6px 0; min-height: 44px; }
+.prog-sub { display: flex; align-items: center; gap: 8px; margin: -2px 0 8px; font-size: .85rem; color: var(--muted); }
+.bar { flex: 1; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--orange); }
+.bar i.full { background: var(--ok); }
+.lv.wide { padding: 0 12px; font-size: .9rem; }
+.stats h3 { margin: 14px 0 6px; }
+.st-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: var(--bg); margin-bottom: 6px; }
+.st-row.bad { background: color-mix(in srgb, var(--miss) 14%, var(--bg)); }
+.st-word { flex: 1; font-family: var(--word); font-weight: 700; font-size: 1.05rem; min-width: 0; overflow-wrap: anywhere; }
+.st-num { font-size: .9rem; white-space: nowrap; } .st-num .ok { color: var(--ok); } .st-num .ko { color: var(--miss); } .st-num.muted { color: var(--muted); }
+.st-tag { font-size: .75rem; color: var(--muted); min-width: 64px; text-align: right; }
+.st-unseen { font-family: var(--word); }
+#statsTabs { display: grid; grid-template-columns: 1fr 1fr; overflow: visible; }
+#statsTabs .lv { width: 100%; }
