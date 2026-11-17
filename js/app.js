@@ -73,9 +73,13 @@ const ROUND = 5;
 const tierOf = g => Math.min(progress.tier[g] || 0, GAMES[g].tiers.length - 1);
 
 /* ---------- statistika slov a postup ----------
-   Na vyšší úroveň se postupuje jen když: kolo 5/5 bez jediné chyby A dítě už hrálo aspoň 80 % slov současné úrovně.
+   Na vyšší úroveň se postupuje jen po kole 5/5 bez jediné chyby A když je splněné pravidlo hry:
+   - Poslouchej a Čti (málo slov s obrázkem): VŠECHNA slova úrovně určená správně (poslední pokus u každého slova bez chyby),
+   - První hláska a Skládej: aspoň 80 % slov úrovně už hraných.
    Po slabém kole (≤ 2 hvězdy) se hra vrátí o úroveň níž. */
 export const ADVANCE_COVERAGE = 0.8;
+const ALL_CORRECT = new Set(["listen", "read"]);
+export const needsAllCorrect = g => ALL_CORRECT.has(g);
 export const tierPool = (g, t = tierOf(g)) => [...new Set(GAMES[g].pool(GAMES[g].tiers[t]))];
 export const wstat = (g, W) => (progress.words[g] || {})[W];
 function recordWord(g, W, ok) {
@@ -84,9 +88,13 @@ function recordWord(g, W, ok) {
   st.n++; ok ? st.ok++ : st.bad++; st.last = ok ? 1 : 0; st.t = Date.now();
   saveProgress();                       // ukládat hned – počítá se i slovo z nedohraného kola
 }
+/** Plnění pravidla pro postup: seen = hraná slova, ok = slova naposledy bez chyby, pct = splnění 0–1, ready = splněno */
 export function coverage(g, t = tierOf(g)) {
-  const pool = tierPool(g, t), seen = pool.filter(w => wstat(g, w)?.n).length;
-  return { seen, total: pool.length, pct: pool.length ? seen / pool.length : 0 };
+  const pool = tierPool(g, t), seen = pool.filter(w => wstat(g, w)?.n).length, ok = pool.filter(w => wstat(g, w)?.last === 1).length;
+  const all = needsAllCorrect(g), done = all ? ok : seen, total = pool.length;
+  const pct = total ? done / total : 0;
+  return { seen, ok, total, pct, ready: all ? ok === total : pct >= ADVANCE_COVERAGE,
+    text: all ? `${ok}/${total} slov správně` : `${seen}/${total} slov hráno` };
 }
 /* Váha slova při výběru: chybná slova častěji, zvládnutá méně, nehraná tak, aby se pokryla úroveň */
 export function weight(g, W, recent) {
@@ -279,11 +287,12 @@ async function finishRound() {
   progress.stars += gold; progress.rounds++; core.addToday(1);
   progress.played = { ...(progress.played || {}), [R.game]: ((progress.played || {})[R.game] || 0) + 1 };
   const g = R.game, t = tierOf(g), cov = coverage(g, t);
-  if (gold === ROUND && cov.pct >= ADVANCE_COVERAGE && t < GAMES[g].tiers.length - 1) progress.tier[g] = t + 1;
+  const cov2 = coverage(g, t);          // po kole (zahrnuje právě odehraná slova)
+  if (gold === ROUND && cov2.ready && t < GAMES[g].tiers.length - 1) progress.tier[g] = t + 1;
   else if (gold <= 2 && t > 0) progress.tier[g] = t - 1;
   progress.last[g] = [...R.words, ...(progress.last[g] || [])].slice(0, 15);
   saveProgress();
-  diag(`kolo ${g}: ${gold}/${ROUND}, hráno ${cov.seen}/${cov.total} slov úrovně, úroveň ${t}→${tierOf(g)}`);
+  diag(`kolo ${g}: ${gold}/${ROUND}, ${cov2.text} (před kolem ${cov.text}), úroveň ${t}→${tierOf(g)}`);
   $("earned").replaceChildren(...R.results.map((ok, k) => h("span", { class: "star " + (ok ? "gold" : "silver"), style: `--d:${k * 0.15}s` }, "★")));
   show("done"); confetti();
   vibrate([30, 60, 30, 60, 80]);
@@ -334,15 +343,15 @@ export function openParent() {
 function renderProgress() {
   $("progressList").replaceChildren(
     h("p", { class: "note" }, `Hvězdiček celkem: ${progress.stars} · odehraných kol: ${progress.rounds} · dnes: ${core.todayCount()}`),
-    h("p", { class: "note" }, `Na další úroveň: kolo bez chyby (5/5) a aspoň ${ADVANCE_COVERAGE * 100} % slov úrovně už hraných.`),
+    h("p", { class: "note" }, `Na další úroveň: kolo bez chyby (5/5) a navíc – Poslouchej a Čti: všechna slova úrovně určená správně; První hláska a Skládej: aspoň ${ADVANCE_COVERAGE * 100} % slov úrovně hraných.`),
     ...Object.entries(GAMES).flatMap(([id, G]) => { const c = coverage(id), bad = Object.values(progress.words[id] || {}).filter(s => s.last === 0).length; return [h("div", { class: "prog-row" },
       h("button", { class: "prog-name link-btn", "data-stats": id, onclick: () => openStats(id) }, G.label + " ›"),
       h("button", { class: "mini", "aria-label": G.label + " lehčí", onclick: () => { progress.tier[id] = Math.max(0, tierOf(id) - 1); saveProgress(); renderProgress(); renderGames(); } }, "−"),
       h("span", { class: "prog-tier" }, `úroveň ${tierOf(id) + 1}/${G.tiers.length}`),
       h("button", { class: "mini", "aria-label": G.label + " těžší", onclick: () => { progress.tier[id] = Math.min(G.tiers.length - 1, tierOf(id) + 1); saveProgress(); renderProgress(); renderGames(); } }, "+")),
       h("div", { class: "prog-sub" },
-        h("span", { class: "bar", "aria-label": `hráno ${c.seen} z ${c.total} slov` }, h("i", { style: `width:${Math.round(c.pct * 100)}%`, class: c.pct >= ADVANCE_COVERAGE ? "full" : "" })),
-        h("span", {}, `${c.seen}/${c.total} slov` + (bad ? ` · ❗ ${bad} k procvičení` : "")))]; }));
+        h("span", { class: "bar", "aria-label": c.text }, h("i", { style: `width:${Math.round(c.pct * 100)}%`, class: c.ready ? "full" : "" })),
+        h("span", {}, c.text + (bad ? ` · ❗ ${bad} k procvičení` : "")))]; }));
 }
 
 /* --- podrobný přehled slov jedné hry --- */
@@ -362,7 +371,7 @@ function renderStats() {
   const unseen = tierPool(g).filter(w => !all[w]);
   const tot = played.reduce((a, [, s]) => ({ ok: a.ok + s.ok, bad: a.bad + s.bad }), { ok: 0, bad: 0 });
   $("statsBody").replaceChildren(...[
-    h("p", { class: "note" }, `Úroveň ${tierOf(g) + 1}/${G.tiers.length} · hráno ${c.seen}/${c.total} slov úrovně (${Math.round(c.pct * 100)} %, potřeba ${ADVANCE_COVERAGE * 100} %) · ` +
+    h("p", { class: "note" }, `Úroveň ${tierOf(g) + 1}/${G.tiers.length} · ` + (needsAllCorrect(g) ? `správně ${c.ok}/${c.total} slov úrovně (potřeba všechna)` : `hráno ${c.seen}/${c.total} slov úrovně (${Math.round(c.pct * 100)} %, potřeba ${ADVANCE_COVERAGE * 100} %)`) + ` · ` +
       `odpovědi celkem ✓ ${tot.ok} / ✗ ${tot.bad}`),
     h("h3", {}, `❗ Procvičit (${trouble.length})`), trouble.length ? trouble.map(([w, s]) => row(w, s)) : h("p", { class: "note" }, "Zatím žádné chyby."),
     h("h3", {}, `✓ Zvládá (${good.length})`), good.length ? good.map(([w, s]) => row(w, s)) : h("p", { class: "note" }, "Zatím nic."),
@@ -511,5 +520,5 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 renderGames();
 
 /* Pro testy (tests/s23.js) */
-window.hl = { core, audio, R, GAMES, startGame, pictureOptions, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
+window.hl = { core, audio, R, GAMES, startGame, needsAllCorrect, pictureOptions, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
   get current() { return current; } };
