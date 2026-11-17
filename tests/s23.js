@@ -64,6 +64,8 @@ function serve() {
     await page.waitForFunction(() => window.hl, null, { timeout: 10000 });
     await shot("1-domu");
     check("domů: 4 hry jako velká tlačítka", await page.locator("#games .game").count() === 4);
+    // viewport-fit=cover nechá Chrome na Androidu kreslit pod stavový řádek a navigační lištu (useknuté lišty, zjištěno na S21 FE)
+    check("stránka se nekreslí pod lišty telefonu (bez viewport-fit=cover)", await ev(() => !/viewport-fit\s*=\s*cover/.test(document.querySelector('meta[name="viewport"]').content)));
     check("domů: bez vodorovného posouvání", await ev(() => document.documentElement.scrollWidth <= innerWidth));
     const sw = await ev(() => Promise.race([navigator.serviceWorker.ready.then(r => !!r.active), new Promise(r => setTimeout(() => r(false), 8000))]));
     check("service worker běží", sw);
@@ -163,7 +165,8 @@ function serve() {
       await shot(`3-hra-${g}`);
       const words = await ev(() => [...hl.R.words]);
       check(`${g}: kolo má 5 slov`, words.length === 5, words.join(" "));
-      check(`${g}: zadání nemá text k přečtení (kromě hry Čti)`, g === "read" || await ev(() => !/[a-zá-ž]{3,}/i.test(document.querySelector("#prompt").innerText.replace(/\s/g, ""))));
+      check(`${g}: zadání nemá text k přečtení (kromě hry Čti)`, g === "read" || await ev(() => (() => { const c = document.querySelector("#prompt").cloneNode(true); c.querySelectorAll(".ltr").forEach(e => e.remove());   // dlaždice písmen jsou součást hry
+        return !/[a-zá-ž]{3,}/i.test(c.textContent.replace(/\s/g, "")); })()));
       let okAll = true;
       for (let k = 0; k < 5; k++) {
         const W = await answer(g, k === 0);

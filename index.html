@@ -2,8 +2,11 @@
 <html lang="cs">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#F3F7FF">
+<!-- Bez viewport-fit=cover: jinak Chrome na Androidu (aplikace na ploše) kreslí stránku pod stavový řádek
+     a navigační lištu a horní tlačítka i spodní odpovědi jsou useknuté. Hlídá tests/s23.js. -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F3F7FF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121A2E" media="(prefers-color-scheme: dark)">
 <meta name="view-transition" content="same-origin">
 <title>Robot Hláskoun</title>
 <link rel="manifest" href="manifest.webmanifest">
