@@ -35,6 +35,8 @@ Jde o emulaci v Chromiu, ne o skutečný telefon – u věcí, které emulace ne
 - Nové slovo s obrázkem: doplnit do `js/pictures.js` (emoji do verze 13, bez ZWJ), v jedné otázce (i v jednom kole) nikdy dva stejné ani podobné obrázky – podobné obrázky patří do stejné skupiny v `PIC_GROUPS` (`picsClash()`); nové slovo s obrázkem podobným jinému do skupiny přidat.
 - Hry Poslouchej a Čti používají jen slova s obrázkem (242 slov; dalších 96 slov bylo přidáno do `LEVELS` jen kvůli obrázkům a **nemají nahrávku aplikace** – čte je hlas telefonu; `audio.canSay()` je bez hlasu telefonu vyřadí z her První hláska a Skládej). Při generování hlasu Hanka se nahrají i ona (skript bere `LEVELS`).
 
+- **Vlastní obrázky (plán):** uživatel nechá vygenerovat obrázky pro slova bez emoji podle `tools/obrazky/` (seznam + požadavky + postup zapracování v README).
+
 ## Poznámky
 
 - Uživatel komunikuje česky; texty v aplikaci jsou česky.
