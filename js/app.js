@@ -394,14 +394,23 @@ document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click
 /* Pozdrav robota při prvním dotyku na úvodní obrazovce */
 $("robotHome").addEventListener("click", async () => { await unlock(); sayText("Ahoj! Vyber si hru."); });
 
-/* ---------- koutek pro rodiče: podržet ⚙️ 1,5 s ---------- */
+/* ---------- koutek pro rodiče: podržet ⚙️ 1,5 s, nebo 5× rychle ťuknout ----------
+   iPhone (Safari) při delším podržení spustí vlastní gesto (lupa, výběr) a podržení přeruší (pointercancel),
+   proto: touch-action none + zrušení výchozí akce dotyku, a náhradní cesta 5 ťuknutí do 3 s. */
 (() => {
-  const btn = $("parentBtn"); let t = null;
+  const btn = $("parentBtn"); let t = null, taps = [];
   const cancel = () => { clearTimeout(t); t = null; btn.classList.remove("holding"); };
-  btn.addEventListener("pointerdown", e => { e.preventDefault(); btn.classList.add("holding"); t = setTimeout(() => { cancel(); openParent(); }, 1500); });
-  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => btn.addEventListener(ev, () => {
-    if (t) { cancel(); $("parentHint").hidden = false; setTimeout(() => $("parentHint").hidden = true, 2500); }
-  }));
+  const start = () => { if (t) return; btn.classList.add("holding"); t = setTimeout(() => { cancel(); openParent(); }, 1500); };
+  const hint = () => { $("parentHint").hidden = false; setTimeout(() => $("parentHint").hidden = true, 3000); };
+  btn.addEventListener("touchstart", e => { e.preventDefault(); start(); }, { passive: false });   // iOS: žádná lupa ani výběr
+  btn.addEventListener("touchend", e => { e.preventDefault(); if (t) { cancel(); tap(); } }, { passive: false });
+  btn.addEventListener("pointerdown", e => { if (e.pointerType === "touch") return; e.preventDefault(); start(); });
+  btn.addEventListener("pointerup", e => { if (e.pointerType === "touch") return; if (t) { cancel(); tap(); } });
+  btn.addEventListener("pointerleave", e => { if (e.pointerType !== "touch" && t) cancel(); });
+  function tap() {
+    const now = Date.now(); taps = [...taps.filter(x => now - x < 3000), now];
+    if (taps.length >= 5) { taps = []; openParent(); } else hint();
+  }
   btn.addEventListener("contextmenu", e => e.preventDefault());
   btn.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") openParent(); });
 })();
@@ -590,24 +599,35 @@ $("diagCopy").onclick = async () => {
 $("diagClear").onclick = () => { DIAG.length = 0; store.set("hl-diag", DIAG); renderDiag(); };
 
 /* --- instalace na plochu (jen v koutku pro rodiče) --- */
+export function installSteps(ios, inApp, ua) {
+  if (inApp) return "Tento prohlížeč je uvnitř jiné aplikace a na plochu přidávat neumí. Otevřete odkaz v " + (ios ? "Safari" : "Chromu") +
+    " (vpravo nahoře ⋯ nebo ⋮ → Otevřít v prohlížeči) a pak to zkuste znovu.";
+  if (ios && /CriOS/.test(ua)) return "Chrome na iPhonu: ťukněte vpravo nahoře v adresním řádku na Sdílet ⬆︎ → sjeďte dolů → „Přidat na plochu“ → Přidat. (Potřebuje iOS 16.4 a novější; jinak použijte Safari.)";
+  if (ios && /FxiOS|EdgiOS/.test(ua)) return "Na iPhonu otevřete stránku v Safari: Sdílet ⬆︎ → „Přidat na plochu“ → Přidat.";
+  if (ios) return "Safari: ťukněte dole uprostřed na Sdílet ⬆︎ (čtvereček se šipkou) → sjeďte v nabídce dolů → „Přidat na plochu“ → vpravo nahoře Přidat.";
+  return "V prohlížeči ťukněte na ⋮ (Samsung Internet ≡) a zvolte „Přidat na plochu“ / „Nainstalovat aplikaci“.";
+}
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 (() => {
   if (matchMedia("(display-mode: standalone)").matches || navigator.standalone) return;
   const ib = $("pInstall"), hint = $("installHint");
-  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  // prohlížeč uvnitř jiné aplikace (Messenger, Facebook, Instagram, Gmail, Google…) nemá „Přidat na plochu“
+  const inApp = /FBAN|FBAV|FB_IAB|Instagram|Line\/|GSA\/|Gmail|LinkedInApp|Snapchat|TikTok|MicroMessenger/i.test(ua);
   let deferred = null;
   addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferred = e; ib.hidden = false; });
   addEventListener("appinstalled", () => { ib.hidden = true; hint.hidden = false; hint.textContent = "Hotovo, Hláskoun je na ploše."; });
-  if (ios || /Android/.test(navigator.userAgent)) ib.hidden = false;
+  if (ios || inApp || /Android/.test(ua)) ib.hidden = false;
   ib.onclick = async () => {
     if (deferred) { deferred.prompt(); const r = await deferred.userChoice; deferred = null; if (r.outcome === "accepted") ib.hidden = true; return; }
     hint.hidden = false;
-    hint.textContent = ios ? "Ťukněte na Sdílet ⬆︎ a zvolte „Přidat na plochu“." : "V prohlížeči ťukněte na ⋮ (Samsung Internet ≡) a zvolte „Přidat na plochu“ / „Nainstalovat aplikaci“.";
+    hint.textContent = installSteps(ios, inApp, ua);
   };
 })();
 
 renderGames();
 
 /* Pro testy (tests/s23.js) */
-window.hl = { core, audio, R, GAMES, startGame, learningSummary, applyTier, UNKNOWN_WORDS, fitScreen, picEl, needsAllCorrect, pictureOptions, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
+window.hl = { core, audio, R, GAMES, startGame, installSteps, learningSummary, applyTier, UNKNOWN_WORDS, fitScreen, picEl, needsAllCorrect, pictureOptions, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
   get current() { return current; } };

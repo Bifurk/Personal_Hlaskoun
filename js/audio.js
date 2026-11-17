@@ -7,6 +7,8 @@ import { spell } from "./phonetics.js";
    přes playBuf(): ten kontext probudí (případně vytvoří nový) a vždy skončí nejpozději po délce
    nahrávky. AudioBuffer jde přehrát v libovolném kontextu. Kontroluje to tests/s23.js. */
 const AC = window.AudioContext || window.webkitAudioContext;
+// iPhone: přepínač tichého režimu jinak ztlumí zvuk webu; „playback“ (Safari 17+) hraje jako přehrávač médií
+try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
 export let ctx = null;
 /** Háčky pro testy: hooks.playBuf(b) a hooks.tts(text) se volají při každém přehrání */
 export const hooks = { playBuf: null, tts: null };

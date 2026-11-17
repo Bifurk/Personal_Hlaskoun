@@ -17,7 +17,7 @@ const BROWSERS = {
   samsung: "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36",
 };
 // 780 = celá obrazovka (aplikace na ploše), 660 = Chrome s lištami, 600 = ještě nižší, 320×640 = Samsung „Zvětšení obrazovky“
-const SIZES = [[360, 780], [360, 660], [360, 600], [320, 640], [412, 915]];   // 412×915 = Galaxy S21 FE
+const SIZES = [[360, 780], [360, 660], [360, 600], [320, 640], [412, 915], [390, 844]];   // 412×915 = Galaxy S21 FE, 390×844 = iPhone 13
 const GAME_IDS = ["listen", "first", "build", "read"];
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
   ".ogg": "audio/ogg", ".png": "image/png", ".svg": "image/svg+xml", ".webmanifest": "application/manifest+json" };
@@ -130,6 +130,21 @@ function serve() {
     check("rodiče: podržení 1,5 s koutek otevře", await ev(() => document.querySelector("#dlgParent").open));
     await shot("2-rodice");
     await page.tap("#dlgParent .row:last-child .main");
+    // dotykem (jako iPhone): podržení prstem i 5 rychlých ťuknutí
+    const tcdp = await ctx.newCDPSession(page);
+    const pt = { x: pb.x + pb.width / 2, y: pb.y + pb.height / 2 };
+    await tcdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [pt] }); await page.waitForTimeout(1700);
+    await tcdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); await page.waitForTimeout(200);
+    check("rodiče: podržení prstem koutek otevře", await ev(() => document.querySelector("#dlgParent").open));
+    await ev(() => document.querySelector("#dlgParent").close());
+    for (let k = 0; k < 5; k++) { await page.tap("#parentBtn"); await page.waitForTimeout(120); }
+    check("rodiče: 5 rychlých ťuknutí koutek otevře (náhrada pro iPhone)", await ev(() => document.querySelector("#dlgParent").open));
+    await ev(() => document.querySelector("#dlgParent").close());
+    const steps = await ev(() => ({ safari: hl.installSteps(true, false, "iPhone Safari"), chrome: hl.installSteps(true, false, "iPhone CriOS/120"),
+      inapp: hl.installSteps(true, true, "iPhone FBAV"), android: hl.installSteps(false, false, "Android") }));
+    check("iPhone návod: Safari – Sdílet → Přidat na plochu", /Safari.*Sdílet.*Přidat na plochu/.test(steps.safari), steps.safari);
+    check("iPhone návod: Chrome – Sdílet v adresním řádku", /Chrome na iPhonu.*Sdílet/.test(steps.chrome), steps.chrome);
+    check("iPhone návod: prohlížeč v aplikaci → otevřít v Safari", /uvnitř jiné aplikace.*Safari/.test(steps.inapp), steps.inapp);
 
     /* ---------- hry: celé kolo ---------- */
     const t0 = Date.now();
