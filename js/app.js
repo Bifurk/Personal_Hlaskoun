@@ -109,8 +109,8 @@ function chooseWords(g) {
     const sum = cand.reduce((a, c) => a + c.k, 0); let r = Math.random() * sum, i = 0;
     while (i < cand.length - 1 && (r -= cand[i].k) > 0) i++;
     const [{ w }] = cand.splice(i, 1);
-    if (PICS[w] && seenPic.has(PICS[w])) continue;
-    out.push(w); if (PICS[w]) seenPic.add(PICS[w]);
+    if (PICS[w] && out.some(o => PICS[o] && picsClash(o, w))) continue;   // v jednom kole ne dva podobné obrázky
+    out.push(w);
   }
   return shuffle(out);
 }
@@ -182,11 +182,16 @@ async function wrong(el, sayFn) {
 }
 
 const picCard = (W, onclick) => h("button", { class: "pic", "data-word": W, "aria-label": W.toLowerCase(), onclick }, h("span", {}, PICS[W]));
-function pictureOptions(W, n = 3) {
-  const others = shuffle(PIC_WORDS.filter(w => w !== W && PICS[w] !== PICS[W]));
-  // podobná slova (stejná délka nebo začátek) dělají hru zajímavější, ale ne příliš těžkou
+/* Nabídka obrázků: správný + n−1 dalších; všechny obrázky jasně odlišné (picsClash v js/pictures.js) */
+export function pictureOptions(W, n = 3) {
+  const others = shuffle(PIC_WORDS.filter(w => w !== W && !picsClash(w, W)));
+  // podobně dlouhé slovo nebo stejné písmeno na začátku dělá hru zajímavější, ale obrázek musí být jiný
   const similar = others.filter(w => letters(w).length === letters(W).length || w[0] === W[0]);
-  const chosen = [...new Set([...similar.slice(0, 1), ...others])].filter((w, i, a) => a.findIndex(x => PICS[x] === PICS[w]) === i).slice(0, n - 1);
+  const chosen = [];
+  for (const w of [...similar.slice(0, 1), ...others]) {
+    if (chosen.length >= n - 1) break;
+    if (!chosen.includes(w) && !chosen.some(c => picsClash(c, w))) chosen.push(w);
+  }
   return shuffle([W, ...chosen]);
 }
 // Ručička ukáže, kam ťuknout – jen v prvních kolech každé hry, než si to dítě osvojí
@@ -506,5 +511,5 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 renderGames();
 
 /* Pro testy (tests/s23.js) */
-window.hl = { core, audio, R, GAMES, startGame, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
+window.hl = { core, audio, R, GAMES, startGame, pictureOptions, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
   get current() { return current; } };

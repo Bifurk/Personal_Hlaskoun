@@ -45,3 +45,24 @@ const PICS = {
   JABLKO:"🍎",   KLOKAN:"🦘",   VRTULNÍK:"🚁",   BRAMBORA:"🥔",   BROKOLICE:"🥦",   ZMRZLINA:"🍦",   KLADIVO:"🔨",   TYGR:"🐅",
   MÍSA:"🥣",   SOVA:"🦉",   VÁZA:"🏺",   PÁNEV:"🍳",   PŘÍBOR:"🍴", 
 };
+
+// Skupiny slov, jejichž obrázky si jsou podobné (na displeji je dítě nemusí rozlišit).
+// V jedné otázce se z každé skupiny objeví nejvýš jedno slovo – všechny nabízené obrázky musí být jasně odlišné.
+const PIC_GROUPS = [
+  ["SOVA", "VÝR"], ["NOC", "MĚSÍC", "HVĚZDA"], ["CÍL", "TERČ"], ["BALÍK", "KRABICE", "DÁREK"],
+  ["KŮŇ", "KOBYLA"], ["BÝK", "KRÁVA"], ["PES", "ŠTĚNĚ"], ["KOZA", "BERAN", "OVCE"], ["PRASE"],
+  ["KUŘE", "SLEPICE", "KOHOUT", "KROCAN"], ["KOS", "HOLUB", "PAPOUŠEK"], ["MEDVĚD", "MÉĎA"],
+  ["MYŠ", "KŘEČEK", "KRÁLÍK"], ["RAK", "KRAB"], ["RYBA", "ŽRALOK", "DELFÍN", "VELRYBA"],
+  ["MUŽ", "TATÍNEK", "DĚDEČEK", "CHLAPEC"], ["ŽENA"], ["KVĚTINA", "TULIPÁN", "RŮŽE", "KYTICE"],
+  ["LES", "STROM", "PRALES", "LIST", "TRÁVA"], ["HODINY", "BUDÍČEK", "HODINKY"], ["DŮM", "DOMEK", "HOTEL", "ŠKOLA", "PALÁC"],
+  ["VODA", "MOŘE"], ["DÉŠŤ", "POČASÍ", "MRAK"], ["ZIMA", "SNÍH", "LED"], ["NOTA", "PÍSEŇ"],
+  ["VÍNO", "LAHEV", "PIVO"], ["LŽÍCE", "PŘÍBOR"], ["MÍSA", "RÝŽE"], ["KABÁT", "KOŠILE", "ŠATY"],
+  ["DORT", "ZÁKUSEK", "KOLÁČ", "SUŠENKA"], ["BONBON", "LÍZÁTKO"], ["PERO", "TUŽKA", "PASTELKA"],
+  ["AUTO", "SANITKA", "AUTOBUS"], ["LETADLO", "VRTULNÍK", "RAKETA"], ["VČELA", "KOMÁR"], ["ČERV", "HAD"],
+  ["HORA", "KÁMEN"], ["MEČ", "NŮŽ"], ["ŠÍP", "SEKERA"], ["KOČKA", "TYGR", "LEV"], ["JABLKO", "HRUŠKA"],
+  ["MELOUN", "OKURKA"], ["PAPRIKA", "OKURKA"], ["HOUBA", "DÝNĚ"],
+];
+const PIC_GROUP_OF = {};
+PIC_GROUPS.forEach((g, i) => g.forEach(w => { (PIC_GROUP_OF[w] = PIC_GROUP_OF[w] || []).push(i); }));
+/** Jsou obrázky dvou slov zaměnitelné? (stejné emoji nebo stejná skupina podobných) */
+const picsClash = (a, b) => PICS[a] === PICS[b] || (PIC_GROUP_OF[a] || []).some(g => (PIC_GROUP_OF[b] || []).includes(g));

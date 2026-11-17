@@ -90,6 +90,17 @@ function serve() {
     check("obrázky bez složených emoji (ZWJ)", pics.zwj.length === 0, pics.zwj.join(", "));
     check("Poslouchej/Čti: každá úroveň má aspoň 20 slov, první aspoň 30", pics.sizes.every(n => n >= 20) && pics.sizes[0] >= 30, pics.sizes.join(" / "));
     check("všechny obrázky jdou vykreslit", pics.blank.length === 0, pics.blank.join(", "));
+    const uniq = await ev(() => {
+      const bad = [], missingGroup = Object.values(PIC_GROUPS).flat().filter(w => !PICS[w]);
+      for (const W of Object.keys(PICS)) for (let k = 0; k < 40; k++) {
+        const o = hl.pictureOptions(W);
+        if (o.length !== 3 || !o.includes(W)) { bad.push(W + ": " + o.join(",")); break; }
+        if (new Set(o.map(w => PICS[w])).size !== 3 || o.some((a, i) => o.some((b, j) => i < j && picsClash(a, b)))) { bad.push(o.join("/")); break; }
+      }
+      return { bad: bad.slice(0, 5), missingGroup };
+    });
+    check("nabídka obrázků: vždy 3 různé a navzájem nezaměnitelné, včetně správného", uniq.bad.length === 0, uniq.bad.join(" | "));
+    check("skupiny podobných obrázků obsahují jen slova s obrázkem", uniq.missingGroup.length === 0, uniq.missingGroup.join(", "));
     const sayGate = await ev(() => {
       const silent = Object.values(LEVELS).flat().filter(w => !AUDIO_KEYS.has("w_" + w));
       const inFirst = hl.tierPool("first", 0).filter(w => silent.includes(w)), inBuild = hl.tierPool("build", 0).filter(w => silent.includes(w));
