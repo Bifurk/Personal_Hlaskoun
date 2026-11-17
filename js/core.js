@@ -9,7 +9,7 @@ export const store = {
 export const DIAG = store.get("hl-diag", []);
 export function diag(msg) {
   DIAG.push(new Date().toTimeString().slice(0, 8) + " " + msg);
-  if (DIAG.length > 200) DIAG.splice(0, DIAG.length - 200);
+  if (DIAG.length > 500) DIAG.splice(0, DIAG.length - 500);
   store.set("hl-diag", DIAG);
 }
 addEventListener("error", e => diag("CHYBA: " + e.message + " @" + (e.filename || "").split("/").pop() + ":" + e.lineno));

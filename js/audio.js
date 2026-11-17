@@ -182,13 +182,13 @@ export async function sayPhone(k) { const b = REC[k]; if (b) return playBuf(b); 
 /** Pokyn nebo pochvala hlasem telefonu (bez českého hlasu se nic neřekne – hry mají i obrazovou nápovědu) */
 export async function sayText(t) { if (csVoice && settings.wordVoice !== "robot") return ttsSay(t, 0.95); }
 
-export async function spellOut(W, onStep) {
+export async function spellOut(W, onStep, slower = 1) {   // slower > 1: delší pauzy (pomoc po chybě)
   const my = ++token, ph = spell(W, settings.assim);
   for (let i = 0; i < ph.length; i++) {
     if (my !== token) return false;
     onStep && onStep(i);
-    if (REC[ph[i].s]) { await sayPhone(ph[i].s); await wait(settings.gap); }
-    else await wait(settings.gap + 500);
+    if (REC[ph[i].s]) { await sayPhone(ph[i].s); await wait(settings.gap * slower); }
+    else await wait(settings.gap * slower + 500);
   }
   onStep && onStep(-1);
   return my === token;

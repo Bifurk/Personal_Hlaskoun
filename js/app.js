@@ -81,16 +81,20 @@ const wordsOfLevels = lvs => Object.entries(LEVELS).filter(([l]) => lvs.includes
 /* Slova pro „První hláska“: první psané písmeno musí znít stejně jako první hláska (ne „včela“ → f, „děti“ → ď) */
 const firstOk = W => { const L = letters(W)[0]; return ALL_LETTERS.includes(L) && spell(W, true)[0].s === letterSound(L) && spell(W, false)[0].s === letterSound(L); };
 
+/* Slova, která šestileté dítě nezná (abstraktní, knižní). Ve hrách bez obrázku (První hláska, Skládej) jen matou
+   – diagnostika 17. 11.: dítě v První hlásce chybovalo hlavně na SÁL, CIT, HON, LEM, LEN… */
+export const UNKNOWN_WORDS = new Set(["LEN", "LÍN", "SÁL", "HÁJ", "CIT", "HON", "LEM", "NES", "BOK", "ŘEČ", "MÍR"]);
+
 export const GAMES = {
   listen: { icon: "👂", label: "Poslouchej", color: "blue",
     say: "Poslouchej robota a ťukni na správný obrázek.",
     tiers: [[1], [2], [3], [4, 5], [6, 7], [8, 9]], pool: lv => PIC_WORDS.filter(w => lv.includes(LEVEL_OF[w])) },
   first: { icon: "A", label: "První hláska", color: "orange",
     say: "Jakým písmenem začíná slovo?",
-    tiers: [[1], [2], [3], [4], [5], [6], [7], [8], [9]], pool: lv => wordsOfLevels(lv).filter(w => firstOk(w) && audio.canSay(w)) },
+    tiers: [[1], [2], [3], [4], [5], [6], [7], [8], [9]], pool: lv => wordsOfLevels(lv).filter(w => firstOk(w) && audio.canSay(w) && !UNKNOWN_WORDS.has(w)) },
   build: { icon: "🧩", label: "Skládej", color: "green",
     say: "Poslouchej a slož slovo z písmenek.",
-    tiers: [[1], [2], [3], [9], [4], [6], [5], [7], [8]], pool: lv => wordsOfLevels(lv).filter(audio.canSay) },
+    tiers: [[1], [2], [3], [9], [4], [6], [5], [7], [8]], pool: lv => wordsOfLevels(lv).filter(w => audio.canSay(w) && !UNKNOWN_WORDS.has(w)) },
   read: { icon: "📖", label: "Čti", color: "purple",
     say: "Přečti slovo a ťukni na obrázek.",
     tiers: [[1], [2], [3], [4, 5], [6, 7], [8, 9]], pool: lv => PIC_WORDS.filter(w => lv.includes(LEVEL_OF[w])) },
@@ -108,11 +112,20 @@ const ALL_CORRECT = new Set(["listen", "read"]);
 export const needsAllCorrect = g => ALL_CORRECT.has(g);
 export const tierPool = (g, t = tierOf(g)) => [...new Set(GAMES[g].pool(GAMES[g].tiers[t]))];
 export const wstat = (g, W) => (progress.words[g] || {})[W];
-function recordWord(g, W, ok) {
+/* Záznam odpovědi: wrong = s čím si slovo spletlo {volba: počet}, ms = průměrný čas do první odpovědi */
+function recordWord(g, W, ok, info = {}) {
   const all = progress.words[g] = progress.words[g] || {};
   const st = all[W] = all[W] || { n: 0, ok: 0, bad: 0 };
   st.n++; ok ? st.ok++ : st.bad++; st.last = ok ? 1 : 0; st.t = Date.now();
+  if (info.ms) st.ms = Math.round(st.ms ? st.ms * 0.7 + info.ms * 0.3 : info.ms);
+  for (const c of info.wrong || []) {
+    st.wrong = st.wrong || {}; st.wrong[c] = (st.wrong[c] || 0) + 1;
+    const keys = Object.keys(st.wrong); if (keys.length > 6) delete st.wrong[keys.sort((a, b) => st.wrong[a] - st.wrong[b])[0]];
+    if (info.letter) { const cf = progress.conf = progress.conf || {}; const k = `${g}:${info.letter}>${c}`; cf[k] = (cf[k] || 0) + 1; }
+  }
   saveProgress();                       // ukládat hned – počítá se i slovo z nedohraného kola
+  const sec = info.ms ? (info.ms / 1000).toFixed(1).replace(".", ",") + " s" : "";
+  diag(`${ok ? "✓" : "✗"} ${g} ${W}${info.wrong?.length ? " → " + info.wrong.join(", ") : ""}${sec ? " · " + sec : ""}${info.again ? " · 🔊" + info.again : ""}`);
 }
 /** Plnění pravidla pro postup: seen = hraná slova, ok = slova naposledy bez chyby, pct = splnění 0–1, ready = splněno */
 export function coverage(g, t = tierOf(g)) {
@@ -150,7 +163,7 @@ function chooseWords(g) {
 }
 
 /* Stav kola */
-const R = { game: null, words: [], i: 0, results: [], mistakes: 0, busy: false, word: null, onAgain: null };
+const R = { game: null, words: [], i: 0, results: [], mistakes: 0, busy: false, word: null, onAgain: null, t0: 0, firstMs: 0, chosen: [], again: 0, letter: null };
 
 function renderGames() {
   $("games").replaceChildren(...Object.entries(GAMES).map(([id, G]) =>
@@ -173,7 +186,9 @@ function unlock() {                // první dotyk: odemknout zvuk a načíst na
 export async function startGame(g, words = null) {   // words: jen pro testy (konkrétní slova)
   stopAll();
   await unlock();
-  Object.assign(R, { game: g, words: words || chooseWords(g), i: 0, results: [], mistakes: 0 });
+  logAbandon();
+  Object.assign(R, { game: g, words: words || chooseWords(g), i: 0, results: [], mistakes: 0, cov0: null });
+  R.cov0 = coverage(g);
   document.body.dataset.game = GAMES[g].color;
   diag("hra " + g + " úroveň " + tierOf(g) + ": " + R.words.join(" "));
   show("game");
@@ -191,7 +206,7 @@ function renderDots() {
 function nextWord(first = false) {
   document.body.classList.remove("long-word");
   if (R.i >= R.words.length) return finishRound();
-  R.word = R.words[R.i]; R.mistakes = 0; R.busy = false;
+  R.word = R.words[R.i]; R.mistakes = 0; R.busy = false; R.t0 = Date.now(); R.firstMs = 0; R.chosen = []; R.again = 0; R.letter = null;
   mood(); renderDots();
   ({ listen: gListen, first: gFirst, build: gBuild, read: gRead })[R.game](R.word, first);
   fitScreen(); queueFit();
@@ -199,16 +214,20 @@ function nextWord(first = false) {
 
 async function correct(el) {
   if (R.busy) return; R.busy = true;
+  if (!R.firstMs) R.firstMs = Date.now() - R.t0;
   el && el.classList.add("ok");
   stopAll(); mood("happy"); vibrate(30); burst(el);
   R.results.push(R.mistakes === 0); renderDots();
-  recordWord(R.game, R.word, R.mistakes === 0);
+  recordWord(R.game, R.word, R.mistakes === 0, { ms: R.firstMs || Date.now() - R.t0, wrong: R.chosen, again: R.again, letter: R.letter });
   await praise();
   await wait(500);
   R.i++; nextWord();
 }
-async function wrong(el, sayFn) {
+/** Špatná odpověď; chosen = co dítě vybralo (slovo obrázku nebo písmeno) */
+async function wrong(el, sayFn, chosen) {
   R.mistakes++;
+  if (!R.firstMs) R.firstMs = Date.now() - R.t0;
+  if (chosen && R.chosen.length < 4) R.chosen.push(chosen);
   if (el) { el.classList.remove("shake"); void el.offsetWidth; el.classList.add("bad", "shake"); }
   mood("sad"); vibrate([60, 40, 60]);
   stopAll();
@@ -244,9 +263,11 @@ function gListen(W, first) {
   const tiles = ph.map(() => h("span", { class: "tile" }));
   $("prompt").replaceChildren(h("div", { class: "tiles" }, tiles));
   const go = () => spellOut(W, i => tiles.forEach((t, k) => { t.classList.toggle("on", k === i); if (k === i) t.classList.add("seen"); }));
-  R.onAgain = go;
+  R.onAgain = () => { R.again++; go(); };
   $("answers").replaceChildren(h("div", { class: "pics" }, pictureOptions(W).map(w =>
-    picCard(w, e => { if (R.busy) return; w === W ? correct(e.currentTarget) : wrong(e.currentTarget, () => sayWord(w)); }))),
+    picCard(w, e => { if (R.busy) return;
+      if (w === W) { const el = e.currentTarget; R.busy = true; el.classList.add("ok"); sayWord(W).then(() => { R.busy = false; correct(el); }); }  // celé slovo spojí hlásky se slovem
+      else wrong(e.currentTarget, async () => { await sayWord(w); if (R.mistakes === 1) { await wait(350); await spellOut(W, null, 1.5); } }, w); }))),
     ...(first ? [hand()] : []).filter(Boolean));
   setTimeout(go, 300);
 }
@@ -261,12 +282,12 @@ function gFirst(W, first) {
     PICS[W] ? h("button", { class: "pic hero-pic", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, picEl(W))
             : h("button", { class: "speaker", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, "🔊"),
     h("div", { class: "word-row" }, firstSlot, rest));
-  R.onAgain = () => sayWord(W);
+  R.onAgain = () => { R.again++; sayWord(W); };
   $("answers").replaceChildren(h("div", { class: "letters" }, opts.map(x =>
     h("button", { class: "letter-btn", "aria-label": "písmeno " + x, onclick: e => {
       const el = e.currentTarget; if (R.busy) return;
       if (x === L) { R.busy = true; el.classList.add("ok"); firstSlot.textContent = cs(x); firstSlot.classList.add("filled"); rest.forEach(r => r.classList.remove("dim")); sayPhone(letterSound(x)).then(() => { R.busy = false; correct(el); }); }
-      else wrong(el, () => sayPhone(letterSound(x)));
+      else { R.letter = L; wrong(el, () => sayPhone(letterSound(x)), x); }
     } }, cs(x)))), ...(first ? [hand()] : []).filter(Boolean));
   setTimeout(() => sayWord(W), 300);
 }
@@ -283,7 +304,7 @@ function gBuild(W, first) {
     PICS[W] ? h("button", { class: "pic hero-pic small", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, picEl(W))
             : h("button", { class: "speaker", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, "🔊"),
     h("div", { class: "word-row" + (L.length > 6 ? " long" : "") }, slots));
-  R.onAgain = () => sayWord(W);
+  R.onAgain = () => { R.again++; sayWord(W); };
   const keys = bank.map(b => h("button", { class: "key", "aria-label": "písmeno " + b.l, onclick: e => {
     if (R.busy) return;
     const k = e.currentTarget;
@@ -295,7 +316,7 @@ function gBuild(W, first) {
       if (pos === L.length) { R.busy = true; slots.forEach(s => s.classList.add("ok")); wait(350).then(() => sayWord(W)).then(() => { R.busy = false; correct(null); }); }
     } else {
       missHere++;
-      wrong(k, null);
+      R.letter = L[pos]; wrong(k, null, b.l);
       setTimeout(() => k.classList.remove("bad"), 600);
       if (missHere >= 2) keys.find(q => !q.disabled && bank[keys.indexOf(q)].l === L[pos])?.classList.add("hint");
     }
@@ -307,25 +328,39 @@ function gBuild(W, first) {
 /* 4) Čti: slovo napsané, dítě ťukne na obrázek; 🔊 přečte slovo (pomoc) */
 function gRead(W, first) {
   $("prompt").replaceChildren(h("div", { class: "read-word" + (W.length > 6 ? " long" : "") }, cs(W)));
-  R.onAgain = () => { R.mistakes++; sayWord(W); };
+  R.onAgain = () => { R.mistakes++; R.again++; sayWord(W); };
   $("answers").replaceChildren(h("div", { class: "pics" }, pictureOptions(W).map(w =>
     picCard(w, e => { const el = e.currentTarget; if (R.busy) return;
       if (w === W) { R.busy = true; el.classList.add("ok"); sayWord(W).then(() => { R.busy = false; correct(el); }); }
-      else wrong(el, () => sayWord(w)); }))),
+      else wrong(el, () => sayWord(w), w); }))),
     ...(first ? [hand()] : []).filter(Boolean));
+}
+
+/* Změna úrovně po kole. Postup: 5/5 a splněné pravidlo hry. Návrat o úroveň níž až po DVOU slabých kolech
+   (≤ 2 hvězdy) za sebou a nikdy v prvních 3 kolech po postupu (diagnostika 17. 11.: po postupu dítě hned
+   jedním slabým kolem spadlo zpět a muselo znovu zvládnout všech 34 slov). */
+export function applyTier(g, gold, cov) {
+  const t = tierOf(g), max = GAMES[g].tiers.length - 1;
+  progress.grace = progress.grace || {}; progress.weak = progress.weak || {};
+  const grace = progress.grace[g] || 0;
+  progress.weak[g] = gold <= 2 ? (progress.weak[g] || 0) + 1 : 0;
+  if (gold === ROUND && cov.ready && t < max) { progress.tier[g] = t + 1; progress.grace[g] = 3; progress.weak[g] = 0; return "postup"; }
+  if (grace > 0) progress.grace[g] = grace - 1;
+  if (progress.weak[g] >= 2 && t > 0 && grace === 0) { progress.tier[g] = t - 1; progress.weak[g] = 0; return "2 slabá kola za sebou"; }
+  if (gold <= 2 && t > 0) return grace ? "slabé kolo, ochrana po postupu" : "slabé kolo (1. za sebou)";
+  return "";
 }
 
 async function finishRound() {
   const gold = R.results.filter(Boolean).length;
   progress.stars += gold; progress.rounds++; core.addToday(1);
   progress.played = { ...(progress.played || {}), [R.game]: ((progress.played || {})[R.game] || 0) + 1 };
-  const g = R.game, t = tierOf(g), cov = coverage(g, t);
+  const g = R.game, t = tierOf(g), cov = R.cov0 || coverage(g, t);
   const cov2 = coverage(g, t);          // po kole (zahrnuje právě odehraná slova)
-  if (gold === ROUND && cov2.ready && t < GAMES[g].tiers.length - 1) progress.tier[g] = t + 1;
-  else if (gold <= 2 && t > 0) progress.tier[g] = t - 1;
+  const why = applyTier(g, gold, cov2);
   progress.last[g] = [...R.words, ...(progress.last[g] || [])].slice(0, 15);
   saveProgress();
-  diag(`kolo ${g}: ${gold}/${ROUND}, ${cov2.text} (před kolem ${cov.text}), úroveň ${t}→${tierOf(g)}`);
+  diag(`kolo ${g}: ${gold}/${ROUND}, ${cov2.text} (před kolem ${cov.text}), úroveň ${t}→${tierOf(g)}${why ? " – " + why : ""}`);
   $("earned").replaceChildren(...R.results.map((ok, k) => h("span", { class: "star " + (ok ? "gold" : "silver"), style: `--d:${k * 0.15}s` }, "★")));
   show("done"); confetti();
   vibrate([30, 60, 30, 60, 80]);
@@ -349,7 +384,8 @@ function confetti() {
 }
 
 /* ---------- ovládání ---------- */
-$("homeBtn").onclick = () => { stopAll(); renderGames(); show("home"); };
+function logAbandon() { if (R.game && current === "game" && R.i < R.words.length) diag(`kolo ${R.game} opuštěno po ${R.i}/${R.words.length} slovech (u slova ${R.word})`); }
+$("homeBtn").onclick = () => { logAbandon(); stopAll(); renderGames(); show("home"); };
 $("againBtn").onclick = () => { stopAll(); R.onAgain && R.onAgain(); };
 $("playAgain").onclick = () => startGame(R.game);
 $("goHome").onclick = () => { renderGames(); show("home"); };
@@ -395,7 +431,8 @@ function renderStats() {
   $("statsTabs").replaceChildren(...Object.entries(GAMES).map(([id, X]) =>
     h("button", { class: "lv wide", "aria-pressed": String(id === g), onclick: () => { statsGame = id; renderStats(); } }, X.label)));
   const row = (W, st) => h("div", { class: "st-row" + (st && st.last === 0 ? " bad" : ""), "data-word": W },
-    h("span", { class: "st-word" }, picEl(W, "inline"), " ", cs(W)),
+    h("span", { class: "st-word" }, picEl(W, "inline"), " ", cs(W),
+      st && st.wrong ? h("small", { class: "st-conf" }, "plete s: " + Object.entries(st.wrong).map(([k, v]) => cs(k) + (v > 1 ? " ×" + v : "")).join(", ")) : null),
     st ? h("span", { class: "st-num" }, h("b", { class: "ok" }, "✓ " + st.ok), " ", h("b", { class: "ko" }, "✗ " + st.bad)) : h("span", { class: "st-num muted" }, "–"),
     h("span", { class: "st-tag" }, !st ? "nehráno" : st.last === 0 ? "naposledy špatně" : st.bad > st.ok ? "chybuje" : st.ok >= 2 && !st.bad ? "umí" : "dobře"));
   const played = Object.entries(all);
@@ -512,6 +549,24 @@ $("gap").oninput = e => { settings.gap = +e.target.value; saveSettings(); };
 for (const k of ["assim", "lower", "vibrate"]) $(k).onchange = e => { settings[k] = e.target.checked; saveSettings(); };
 
 /* --- diagnostika --- */
+/* Souhrn pro diagnostiku: kde dítě chybuje, s čím si slova a písmena plete, jak dlouho přemýšlí */
+export function learningSummary() {
+  const out = [], sec = ms => ms ? (ms / 1000).toFixed(1).replace(".", ",") + " s" : "–";
+  for (const [g, G] of Object.entries(GAMES)) {
+    const all = Object.entries(progress.words[g] || {});
+    if (!all.length) { out.push(`${G.label}: zatím nehráno`); continue; }
+    const c = coverage(g), tot = all.reduce((a, [, x]) => ({ ok: a.ok + x.ok, bad: a.bad + x.bad }), { ok: 0, bad: 0 });
+    const ms = all.filter(([, x]) => x.ms).map(([, x]) => x.ms), avg = ms.length ? ms.reduce((a, b) => a + b, 0) / ms.length : 0;
+    out.push(`${G.label}: úroveň ${tierOf(g) + 1}/${G.tiers.length}, ${c.text}, odpovědi ✓${tot.ok} ✗${tot.bad} (${Math.round(100 * tot.ok / Math.max(1, tot.ok + tot.bad))} %), průměr ${sec(avg)}/slovo, kol ${(progress.played || {})[g] || 0}`);
+    const hard = all.filter(([, x]) => x.bad).sort((a, b) => (b[1].bad / b[1].n) - (a[1].bad / a[1].n) || b[1].bad - a[1].bad).slice(0, 10);
+    if (hard.length) out.push("  nejtěžší: " + hard.map(([w, x]) => `${w} ✓${x.ok}✗${x.bad}` + (x.wrong ? " (" + Object.entries(x.wrong).map(([k, v]) => k + (v > 1 ? "×" + v : "")).join(",") + ")" : "") + (x.last === 0 ? "!" : "")).join("; "));
+    const slow = all.filter(([, x]) => x.ms > 6000).sort((a, b) => b[1].ms - a[1].ms).slice(0, 6);
+    if (slow.length) out.push("  dlouho přemýšlí: " + slow.map(([w, x]) => `${w} ${sec(x.ms)}`).join(", "));
+  }
+  const conf = Object.entries(progress.conf || {}).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  if (conf.length) out.push("Záměny písmen (správně>vybralo): " + conf.map(([k, v]) => k.replace(/^(\w+):/, (m, g) => (g === "first" ? "1.h " : "skl ")) + "×" + v).join(", "));
+  return out;
+}
 function renderDiag() {
   const c = audio.ctx;
   $("diagText").value = [
@@ -524,7 +579,8 @@ function renderDiag() {
     "Service worker: " + (navigator.serviceWorker && navigator.serviceWorker.controller ? "aktivní" : "ne"),
     "Pokrok: " + JSON.stringify(progress.tier) + ", hvězd " + progress.stars + ", kol " + progress.rounds,
     "Obrazovka: " + current + (R.game ? ", hra " + R.game + ", slovo " + R.word : ""),
-    "--- záznam ---", ...DIAG.slice(-60)].join("\n");
+    "--- souhrn učení ---", ...learningSummary(),
+    "--- záznam (✓/✗ slovo → co vybralo · čas · 🔊 opakování) ---", ...DIAG.slice(-150)].join("\n");
 }
 $("diagCopy").onclick = async () => {
   const t = $("diagText"); t.select();
@@ -553,5 +609,5 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 renderGames();
 
 /* Pro testy (tests/s23.js) */
-window.hl = { core, audio, R, GAMES, startGame, fitScreen, picEl, needsAllCorrect, pictureOptions, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
+window.hl = { core, audio, R, GAMES, startGame, learningSummary, applyTier, UNKNOWN_WORDS, fitScreen, picEl, needsAllCorrect, pictureOptions, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
   get current() { return current; } };

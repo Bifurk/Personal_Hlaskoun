@@ -185,6 +185,47 @@ function serve() {
       if (g === "listen") await page.waitForTimeout(700), await shot("4-oslava");
     }
     check("obtížnost se po 4/5 nezměnila", await ev(ids => ids.every(g => hl.tierOf(g) === 0), GAME_IDS));
+    // záznam chyb: s čím si dítě slovo spletlo, čas, souhrn v diagnostice
+    const learn = await ev(ids => {
+      const r = {};
+      for (const g of ids) { const ws = Object.entries(hl.core.progress.words[g] || {}).filter(([, x]) => x.wrong); r[g] = ws.length; }
+      const diag = hl.core.DIAG.join("\n"), sum = hl.learningSummary().join("\n");
+      return { r, cross: /✗ listen \S+ → \S+/.test(diag) && /✓ read \S+ · \d+,\d s/.test(diag), sum, conf: Object.keys(hl.core.progress.conf || {}).length };
+    }, GAME_IDS);
+    check("u chybných slov je uloženo, s čím si je dítě spletlo (všechny 4 hry)", GAME_IDS.every(g => learn.r[g] >= 1), JSON.stringify(learn.r));
+    check("diagnostika zapisuje každou odpověď (✓/✗, volba, čas)", learn.cross);
+    check("souhrn učení: nejtěžší slova a záměny písmen", /nejtěžší: /.test(learn.sum) && /Záměny písmen/.test(learn.sum) && learn.conf >= 1, learn.sum.replace(/\n/g, " | ").slice(0, 200));
+    // neznámá slova nejsou ve hrách bez obrázku
+    check("neznámá slova (CIT, HON, LEM…) se ve hrách První hláska a Skládej nenabízí", await ev(() =>
+      ["first", "build"].every(g => hl.GAMES[g].tiers.every(t => !hl.GAMES[g].pool(t).some(w => hl.UNKNOWN_WORDS.has(w))))));
+    // férovější návrat o úroveň níž
+    const tierLog = await ev(() => {
+      const g = "build", cov = { ready: true }, notReady = { ready: false }, out = [];
+      const save = JSON.stringify([hl.core.progress.tier, hl.core.progress.grace, hl.core.progress.weak]);
+      hl.core.progress.tier[g] = 0; hl.core.progress.grace = {}; hl.core.progress.weak = {};
+      hl.applyTier(g, 5, cov); out.push(hl.tierOf(g));            // postup → 1
+      hl.applyTier(g, 1, notReady); out.push(hl.tierOf(g));       // slabé kolo hned po postupu → zůstává 1
+      hl.applyTier(g, 2, notReady); out.push(hl.tierOf(g));       // druhé slabé, ale ještě ochrana → 1
+      hl.applyTier(g, 4, notReady); out.push(hl.tierOf(g));       // dobré kolo (ochrana končí) → 1
+      hl.applyTier(g, 2, notReady); out.push(hl.tierOf(g));       // 1. slabé za sebou → 1
+      hl.applyTier(g, 1, notReady); out.push(hl.tierOf(g));       // 2. slabé za sebou → 0
+      const [t, gr, wk] = JSON.parse(save); hl.core.progress.tier = t; hl.core.progress.grace = gr; hl.core.progress.weak = wk;
+      return out.join(",");
+    });
+    check("úroveň: po postupu ochrana, dolů až po 2 slabých kolech za sebou", tierLog === "1,1,1,1,1,0", tierLog);
+    // opuštěné kolo se zapíše
+    await ev(() => hl.startGame("listen")); await page.waitForFunction(() => hl.current === "game" && hl.R.word);
+    await page.tap("#homeBtn"); await page.waitForTimeout(300);
+    check("opuštěné kolo je v diagnostice", await ev(() => /kolo listen opuštěno po 0\/5/.test(hl.core.DIAG.slice(-3).join(" "))));
+    // Poslouchej: po správné odpovědi zazní celé slovo
+    const said = await ev(async () => {
+      await hl.startGame("listen", ["PES", "KOS", "NOS", "LES", "SÝR"]); await new Promise(r => setTimeout(r, 300));
+      let heard = null; hl.audio.hooks.playBuf = b => { if (b === hl.audio.buf["w_PES"]) heard = "PES"; };
+      document.querySelector('.answers .pic[data-word="PES"]').click();
+      await new Promise(r => setTimeout(r, 1500)); hl.audio.hooks.playBuf = null; return heard;
+    });
+    check("Poslouchej: po správné odpovědi robot řekne celé slovo", said === "PES", String(said));
+    await page.tap("#homeBtn"); await page.waitForTimeout(300);
     // postup: kolo 5/5 A pravidlo hry (Poslouchej/Čti: všechna slova úrovně správně; První hláska/Skládej: ≥ 80 % slov hraných)
     const playRound = async (g, wrongFirst, words = null) => {
       await ev(([g, ws]) => hl.startGame(g, ws), [g, words]); await page.waitForFunction(() => hl.current === "game" && hl.R.word);
@@ -466,7 +507,7 @@ function serve() {
     /* ---------- diagnostika ---------- */
     await ev(() => hl.openParent()); await page.tap("#pDiag");
     const diagTxt = await page.inputValue("#diagText");
-    check("diagnostika ukazuje stav a záznam", /Zvuk: running/.test(diagTxt) && /Pokrok: /.test(diagTxt) && /--- záznam ---\n\d\d:\d\d:\d\d /.test(diagTxt) && /hra /.test(diagTxt));
+    check("diagnostika ukazuje stav a záznam", /Zvuk: running/.test(diagTxt) && /Pokrok: /.test(diagTxt) && /--- souhrn učení ---\n.+úroveň/.test(diagTxt) && /--- záznam[^\n]*---\n\d\d:\d\d:\d\d /.test(diagTxt) && /hra /.test(diagTxt));
     await shot("7-diagnostika");
     await ev(() => { for (const d of document.querySelectorAll("dialog[open]")) d.close(); });
 
