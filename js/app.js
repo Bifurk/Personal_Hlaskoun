@@ -36,10 +36,36 @@ function mood(m) {
   for (const r of robots()) { r.classList.remove("happy", "sad"); void r.offsetWidth; if (m) r.classList.add(m); }
 }
 
+/* ---------- přizpůsobení obrazovce a velikosti písma ----------
+   Po vykreslení změří, jestli se obrazovka vejde a žádné písmeno/obrázek nepřetéká svou krabičku;
+   když ne, zmenšuje --fit (rozměry her jsou v em), dokud se nevejde (nejvýš na 50 %). */
+const OVERFLOW_SEL = ".ltr, .key, .letter-btn, .pic, .read-word, .speaker, .round-btn, .game, .bubble";
+function overflows() {
+  const de = document.documentElement, scr = document.querySelector(".screen:not([hidden])");
+  if (de.scrollHeight > innerHeight + 1 || de.scrollWidth > innerWidth + 1) return true;
+  if (!scr) return false;
+  for (const e of scr.querySelectorAll(OVERFLOW_SEL)) {
+    if (!e.offsetParent) continue;
+    const r = e.getBoundingClientRect();
+    if (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1 || r.right > innerWidth + 1 || r.left < -1) return true;
+  }
+  return false;
+}
+export function fitScreen() {
+  const de = document.documentElement; let f = 1;
+  de.style.setProperty("--fit", "1");
+  while (f > 0.5 && overflows()) { f = Math.round((f - 0.05) * 100) / 100; de.style.setProperty("--fit", String(f)); }
+  return f;
+}
+let fitQueued = false;
+const queueFit = () => { if (fitQueued) return; fitQueued = true; requestAnimationFrame(() => { fitQueued = false; fitScreen(); }); };
+addEventListener("resize", queueFit);
+document.fonts && document.fonts.ready.then(queueFit);
+
 /* ---------- obrazovky (View Transitions, když je prohlížeč umí) ---------- */
 let current = "home";
 function show(id) {
-  const go = () => { for (const s of document.querySelectorAll(".screen")) s.hidden = s.id !== id; current = id; };
+  const go = () => { for (const s of document.querySelectorAll(".screen")) s.hidden = s.id !== id; current = id; fitScreen(); };
   if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
     const t = document.startViewTransition(go);   // přeskočená animace (rychlé přepnutí) není chyba
     for (const p of [t.ready, t.finished, t.updateCallbackDone]) p && p.catch(() => {});
@@ -168,6 +194,7 @@ function nextWord(first = false) {
   R.word = R.words[R.i]; R.mistakes = 0; R.busy = false;
   mood(); renderDots();
   ({ listen: gListen, first: gFirst, build: gBuild, read: gRead })[R.game](R.word, first);
+  fitScreen(); queueFit();
 }
 
 async function correct(el) {
@@ -526,5 +553,5 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 renderGames();
 
 /* Pro testy (tests/s23.js) */
-window.hl = { core, audio, R, GAMES, startGame, picEl, needsAllCorrect, pictureOptions, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
+window.hl = { core, audio, R, GAMES, startGame, fitScreen, picEl, needsAllCorrect, pictureOptions, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
   get current() { return current; } };

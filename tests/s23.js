@@ -17,7 +17,7 @@ const BROWSERS = {
   samsung: "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36",
 };
 // 780 = celá obrazovka (aplikace na ploše), 660 = Chrome s lištami, 600 = ještě nižší, 320×640 = Samsung „Zvětšení obrazovky“
-const SIZES = [[360, 780], [360, 660], [360, 600], [320, 640]];
+const SIZES = [[360, 780], [360, 660], [360, 600], [320, 640], [412, 915]];   // 412×915 = Galaxy S21 FE
 const GAME_IDS = ["listen", "first", "build", "read"];
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
   ".ogg": "audio/ogg", ".png": "image/png", ".svg": "image/svg+xml", ".webmanifest": "application/manifest+json" };
@@ -402,6 +402,39 @@ function serve() {
       await ev(() => hl.show("done")); await page.waitForTimeout(400); await screenCheck("oslava");
       await ev(() => hl.audio.stopAll());
     }
+    /* ---------- zvětšené písmo v telefonu (Nastavení → Displej → Velikost písma) ---------- */
+    const cdpFont = await ctx.newCDPSession(page); await cdpFont.send("Page.enable");
+    for (const scale of [1.3, 1.5]) for (const [w, hgt] of [[412, 915], [360, 780], [360, 660]]) {
+      await page.setViewportSize({ width: w, height: hgt });
+      await cdpFont.send("Page.setFontSizes", { fontSizes: { standard: Math.round(16 * scale), fixed: Math.round(13 * scale) } });
+      const tag = `písmo ${Math.round(scale * 100)} % ${w}×${hgt}`;
+      const textCheck = async (name) => {
+        await page.waitForTimeout(350); await ev(() => hl.fitScreen());
+        const m = await ev(() => {
+          const scope = [...document.querySelectorAll(".screen:not([hidden]), dialog[open]")];
+          const cut = scope.flatMap(sc => [...sc.querySelectorAll("button, .ltr, .read-word, .bubble")]).filter(e => { const r = e.getBoundingClientRect();
+            return r.width > 0 && (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1 || r.right > innerWidth + 1 || r.left < -1); });
+          const dlg = document.querySelector("dialog[open]");
+          return { cut: cut.map(e => (e.getAttribute("aria-label") || e.textContent).trim().slice(0, 14)),
+            scroll: !dlg && document.documentElement.scrollHeight > innerHeight + 1,
+            dlgOut: dlg ? dlg.getBoundingClientRect().bottom > innerHeight + 1 || [...dlg.querySelectorAll(".dlg > .row:last-child button")].some(b => b.getBoundingClientRect().bottom > innerHeight + 1) : false };
+        });
+        check(`${tag} ${name}: písmena v rámečcích, vše vidět`, !m.cut.length && !m.scroll && !m.dlgOut, m.cut.join(" | ") + (m.scroll ? " (posouvá se)" : "") + (m.dlgOut ? " (okno přesahuje)" : ""));
+      };
+      await ev(() => hl.show("home")); await textCheck("domů");
+      for (const g of GAME_IDS) {
+        const longest = await ev(g => { const G = hl.GAMES[g]; return [...new Set(G.tiers.flatMap(t => G.pool(t)))].sort((a, b) => b.length - a.length)[0]; }, g);
+        await ev(([g, W]) => hl.startGame(g, [W, W, W, W, W]), [g, longest]); await page.waitForFunction(() => hl.current === "game" && hl.R.word);
+        await textCheck(`hra ${g} (${longest})`);
+        if (scale === 1.5 && hgt === 660) await shot(`pismo150-${g}`);
+      }
+      await ev(() => hl.audio.stopAll());
+      for (const [sel, open] of [["#dlgParent", () => hl.openParent()], ["#dlgSet", () => hl.openSet()], ["#dlgStats", () => hl.openStats("listen")]]) {
+        await ev(open); await textCheck(`okno ${sel.slice(4)}`);
+        await ev(() => { for (const d of document.querySelectorAll("dialog[open]")) d.close(); });
+      }
+    }
+    await cdpFont.send("Page.setFontSizes", { fontSizes: { standard: 16, fixed: 13 } });
     await page.setViewportSize(S23.viewport);
     await ev(() => { for (const g of ["listen", "first", "build", "read"]) hl.core.progress.tier[g] = g === "read" ? 1 : 0; hl.core.saveProgress(); hl.show("home"); });
 
@@ -430,7 +463,7 @@ function serve() {
     /* ---------- diagnostika ---------- */
     await ev(() => hl.openParent()); await page.tap("#pDiag");
     const diagTxt = await page.inputValue("#diagText");
-    check("diagnostika ukazuje stav a záznam", /Zvuk: running/.test(diagTxt) && /audio:/.test(diagTxt) && /kolo /.test(diagTxt));
+    check("diagnostika ukazuje stav a záznam", /Zvuk: running/.test(diagTxt) && /Pokrok: /.test(diagTxt) && /--- záznam ---\n\d\d:\d\d:\d\d /.test(diagTxt) && /hra /.test(diagTxt));
     await shot("7-diagnostika");
     await ev(() => { for (const d of document.querySelectorAll("dialog[open]")) d.close(); });
 
