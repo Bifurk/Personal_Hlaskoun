@@ -189,7 +189,13 @@ async function wrong(el, sayFn) {
   if (R.mistakes === 1 || R.mistakes % 3 === 0) await oops();
 }
 
-const picCard = (W, onclick) => h("button", { class: "pic", "data-word": W, "aria-label": W.toLowerCase(), onclick }, h("span", {}, PICS[W]));
+/* Obrázek slova: emoji, nebo vlastní obrázek (PICS[W] = "img:SLOVO" → img/pics/SLOVO.webp) */
+export const picEl = (W, cls = "") => {
+  const p = PICS[W]; if (!p) return null;
+  return p.startsWith("img:") ? h("img", { class: "pic-img " + cls, src: `img/pics/${encodeURIComponent(p.slice(4))}.webp`, alt: "", draggable: "false", decoding: "async" })
+                              : h("span", { class: cls }, p);
+};
+const picCard = (W, onclick) => h("button", { class: "pic", "data-word": W, "aria-label": W.toLowerCase(), onclick }, picEl(W));
 /* Nabídka obrázků: správný + n−1 dalších; všechny obrázky jasně odlišné (picsClash v js/pictures.js) */
 export function pictureOptions(W, n = 3) {
   const others = shuffle(PIC_WORDS.filter(w => w !== W && !picsClash(w, W)));
@@ -225,7 +231,7 @@ function gFirst(W, first) {
   const rest = letters(W).slice(1).map(x => h("span", { class: "ltr dim" }, cs(x)));
   const firstSlot = h("span", { class: "ltr slot" }, "?");
   $("prompt").replaceChildren(
-    PICS[W] ? h("button", { class: "pic hero-pic", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, h("span", {}, PICS[W]))
+    PICS[W] ? h("button", { class: "pic hero-pic", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, picEl(W))
             : h("button", { class: "speaker", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, "🔊"),
     h("div", { class: "word-row" }, firstSlot, rest));
   R.onAgain = () => sayWord(W);
@@ -247,7 +253,7 @@ function gBuild(W, first) {
   document.body.classList.toggle("long-word", L.length + extra.length > 8);   // hodně písmen: menší robot a klávesy
   let pos = 0, missHere = 0;
   $("prompt").replaceChildren(
-    PICS[W] ? h("button", { class: "pic hero-pic small", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, h("span", {}, PICS[W]))
+    PICS[W] ? h("button", { class: "pic hero-pic small", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, picEl(W))
             : h("button", { class: "speaker", "aria-label": "Zopakovat slovo", onclick: () => sayWord(W) }, "🔊"),
     h("div", { class: "word-row" + (L.length > 6 ? " long" : "") }, slots));
   R.onAgain = () => sayWord(W);
@@ -362,7 +368,7 @@ function renderStats() {
   $("statsTabs").replaceChildren(...Object.entries(GAMES).map(([id, X]) =>
     h("button", { class: "lv wide", "aria-pressed": String(id === g), onclick: () => { statsGame = id; renderStats(); } }, X.label)));
   const row = (W, st) => h("div", { class: "st-row" + (st && st.last === 0 ? " bad" : ""), "data-word": W },
-    h("span", { class: "st-word" }, (PICS[W] ? PICS[W] + " " : "") + cs(W)),
+    h("span", { class: "st-word" }, picEl(W, "inline"), " ", cs(W)),
     st ? h("span", { class: "st-num" }, h("b", { class: "ok" }, "✓ " + st.ok), " ", h("b", { class: "ko" }, "✗ " + st.bad)) : h("span", { class: "st-num muted" }, "–"),
     h("span", { class: "st-tag" }, !st ? "nehráno" : st.last === 0 ? "naposledy špatně" : st.bad > st.ok ? "chybuje" : st.ok >= 2 && !st.bad ? "umí" : "dobře"));
   const played = Object.entries(all);
@@ -419,13 +425,13 @@ function renderWords() {
   $("lvChips").replaceChildren(...Object.keys(LEVELS).map(l => h("button", { class: "lv", "aria-pressed": String(+l === wordsLevel), onclick: () => { wordsLevel = +l; renderWords(); } }, l)));
   $("wordGrid").replaceChildren(...LEVELS[wordsLevel].map(w => h("button", {
     class: "gw" + (audio.ownWords.has(w) ? " own" : ""), "data-word": w, onclick: () => openWordRec(w) },
-    PICS[w] ? PICS[w] + " " : "", cs(w))));
+    picEl(w, "inline"), PICS[w] ? " " : "", cs(w))));
 }
 let wrec = null;
 const wrecMsg = t => { $("wrecMsg").textContent = t; };
 function renderWordRec() {
   const W = wrec.W, has = audio.ownWords.has(W);
-  $("wrecWord").textContent = (PICS[W] ? PICS[W] + " " : "") + cs(W);
+  $("wrecWord").replaceChildren(...[picEl(W, "inline"), PICS[W] ? " " : "", cs(W)].filter(x => x !== null));
   $("wrecState").textContent = has ? "Teď se přehrává vaše nahrávka." : (OWNV.has("w_" + W) ? "Teď se přehrává nahrávka aplikace." : "Teď slovo čte hlas telefonu.");
   $("wrecOrig").hidden = !has;
   $("wrecRec").classList.toggle("on", !!wrec.r);
@@ -520,5 +526,5 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 renderGames();
 
 /* Pro testy (tests/s23.js) */
-window.hl = { core, audio, R, GAMES, startGame, needsAllCorrect, pictureOptions, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
+window.hl = { core, audio, R, GAMES, startGame, picEl, needsAllCorrect, pictureOptions, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
   get current() { return current; } };

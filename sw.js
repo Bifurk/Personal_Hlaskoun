@@ -1,7 +1,7 @@
 // Service worker: umožní instalaci na plochu a běh bez internetu.
 // Stránka a kód se berou nejdřív ze sítě (aby se projevily aktualizace),
 // nahrávky a ikony nejdřív z mezipaměti.
-const CACHE = "hlaskoun-v16";
+const CACHE = "hlaskoun-v17";
 const SHELL = ["./", "index.html", "css/style.css", "js/data.js", "js/pictures.js", "js/app.js", "js/core.js", "js/phonetics.js", "js/audio.js", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", e => {
@@ -16,7 +16,7 @@ self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-  const cacheFirst = url.origin === location.origin && /\/(audio|icons)\//.test(url.pathname);
+  const cacheFirst = url.origin === location.origin && /\/(audio|icons|img)\//.test(url.pathname);
   const put = res => { if (res.ok || res.type === "opaque") { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); } return res; };
   if (cacheFirst) {
     e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(put)));

@@ -82,7 +82,7 @@ function serve() {
       // emoji musí mít v písmu telefonu barevný obrázek (ne prázdný čtvereček) – změří se šířka vykreslení
       const c = document.createElement("canvas").getContext("2d"); c.font = "32px sans-serif";
       const tofu = c.measureText("\u{10FFFF}").width;
-      const blank = words.filter(w => Math.abs(c.measureText(PICS[w]).width - tofu) < 0.5);
+      const blank = words.filter(w => !PICS[w].startsWith("img:") && Math.abs(c.measureText(PICS[w]).width - tofu) < 0.5);
       return { n: words.length, zwj, notInLevels, sizes, blank };
     });
     check("obrázků je aspoň 240", pics.n >= 240, `${pics.n}`);
@@ -90,6 +90,13 @@ function serve() {
     check("obrázky bez složených emoji (ZWJ)", pics.zwj.length === 0, pics.zwj.join(", "));
     check("Poslouchej/Čti: každá úroveň má aspoň 20 slov, první aspoň 30", pics.sizes.every(n => n >= 20) && pics.sizes[0] >= 30, pics.sizes.join(" / "));
     check("všechny obrázky jdou vykreslit", pics.blank.length === 0, pics.blank.join(", "));
+    const imgs = await ev(async () => {
+      const list = Object.keys(PICS).filter(w => PICS[w].startsWith("img:"));
+      const res = await Promise.all(list.map(w => new Promise(r => { const el = hl.picEl(w); el.onload = () => r([w, el.naturalWidth]); el.onerror = () => r([w, 0]); })));
+      const ungrouped = list.filter(w => !PIC_GROUPS.flat().includes(w));
+      return { n: list.length, bad: res.filter(([, nw]) => nw !== 512).map(([w]) => w), ungrouped };
+    });
+    check("vlastní obrázky: všechny se načtou (512 px)", imgs.n >= 36 && imgs.bad.length === 0, `${imgs.n} obrázků` + (imgs.bad.length ? ", chyba: " + imgs.bad.join(", ") : ""));
     const uniq = await ev(() => {
       const bad = [], missingGroup = Object.values(PIC_GROUPS).flat().filter(w => !PICS[w]);
       for (const W of Object.keys(PICS)) for (let k = 0; k < 40; k++) {
@@ -210,7 +217,7 @@ function serve() {
       let hitBad = 0, hitOther = 0; const other = pool[1];
       for (let k = 0; k < 200; k++) { const ws = hl.chooseWords(g); if (ws.includes(bad)) hitBad++; if (ws.includes(other)) hitOther++; }
       return { hitBad, hitOther, size: pool.length }; });
-    check("chybné slovo se nabízí výrazně častěji než zvládnuté", freq.hitBad > 150 && freq.hitBad > freq.hitOther * 3, JSON.stringify(freq));
+    check("chybné slovo se nabízí výrazně častěji než zvládnuté", freq.hitBad > 100 && freq.hitBad > freq.hitOther * 5, JSON.stringify(freq));
     check("tlačítko Hrát znovu spustí stejnou hru", await page.tap("#playAgain").then(() => page.waitForFunction(() => hl.current === "game" && hl.R.game === "first", null, { timeout: 8000 })).then(() => true, () => false));
     await page.tap("#homeBtn"); await page.waitForTimeout(500);
     check("🏠 vrátí domů", await ev(() => hl.current === "home"));

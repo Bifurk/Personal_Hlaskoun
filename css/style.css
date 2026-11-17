@@ -262,3 +262,6 @@ body.long-word .bank { gap: 8px; }
 .st-unseen { font-family: var(--word); }
 #statsTabs { display: grid; grid-template-columns: 1fr 1fr; overflow: visible; }
 #statsTabs .lv { width: 100%; }
+/* vlastní obrázky (img/pics) – stejně velké jako emoji v témže místě */
+.pic-img { width: 1.15em; height: 1.15em; object-fit: contain; display: block; pointer-events: none; -webkit-user-drag: none; }
+.pic-img.inline { display: inline-block; width: 1.3em; height: 1.3em; vertical-align: -0.3em; }

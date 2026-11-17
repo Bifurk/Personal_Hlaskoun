@@ -46,19 +46,30 @@ const PICS = {
   MÍSA:"🥣",   SOVA:"🦉",   VÁZA:"🏺",   PÁNEV:"🍳",   PŘÍBOR:"🍴", 
 };
 
+// Vlastní obrázky (img/pics/SLOVO.webp, 512 px) pro slova bez vhodného emoji – hodnota „img:“ místo emoji
+Object.assign(PICS, {
+  BIČ: "img:BIČ",  BYT: "img:BYT",  COP: "img:COP",  GÓL: "img:GÓL",  HŮL: "img:HŮL",  JED: "img:JED",
+  KOP: "img:KOP",  KŮL: "img:KŮL",  LAK: "img:LAK",  LOS: "img:LOS",  MOL: "img:MOL",  MÁJ: "img:MÁJ",
+  MÁK: "img:MÁK",  MÝT: "img:MÝT",  PAC: "img:PAC",  PAN: "img:PAN",  PAS: "img:PAS",  PYL: "img:PYL",
+  PÁS: "img:PÁS",  PÍT: "img:PÍT",  PÓL: "img:PÓL",  PÓR: "img:PÓR",  REZ: "img:REZ",  RÝČ: "img:RÝČ",
+  SAD: "img:SAD",  SÍŤ: "img:SÍŤ",  TEP: "img:TEP",  TYČ: "img:TYČ",  TÁC: "img:TÁC",  VES: "img:VES",
+  VEŠ: "img:VEŠ",  VOR: "img:VOR",  VŮZ: "img:VŮZ",  ČICH: "img:ČICH",  ŘÁD: "img:ŘÁD",  ŽÁK: "img:ŽÁK",
+
+});
+
 // Skupiny slov, jejichž obrázky si jsou podobné (na displeji je dítě nemusí rozlišit).
 // V jedné otázce se z každé skupiny objeví nejvýš jedno slovo – všechny nabízené obrázky musí být jasně odlišné.
 const PIC_GROUPS = [
   ["SOVA", "VÝR"], ["NOC", "MĚSÍC", "HVĚZDA"], ["CÍL", "TERČ"], ["BALÍK", "KRABICE", "DÁREK"],
-  ["KŮŇ", "KOBYLA"], ["BÝK", "KRÁVA"], ["PES", "ŠTĚNĚ"], ["KOZA", "BERAN", "OVCE"], ["PRASE"],
+  ["KŮŇ", "KOBYLA"], ["MÍČ", "GÓL", "KOP", "SÍŤ"], ["NOS", "ČICH"], ["HŮL", "TYČ", "KŮL", "BIČ", "REZ"], ["MOL", "MOTÝL"], ["VEŠ", "PAVOUK", "MRAVENEC"], ["VOR", "LOĎ"], ["ŘÁD", "POHÁR", "KORUNA"], ["PAS", "KNIHA"], ["PÓR", "CIBULE", "OKURKA"], ["TÁC", "PÁNEV", "MÍSA"], ["MÝT", "RUKA", "PĚST"], ["BÝK", "KRÁVA"], ["PES", "ŠTĚNĚ", "PAC"], ["KOZA", "BERAN", "OVCE"], ["PRASE"],
   ["KUŘE", "SLEPICE", "KOHOUT", "KROCAN"], ["KOS", "HOLUB", "PAPOUŠEK"], ["MEDVĚD", "MÉĎA"],
   ["MYŠ", "KŘEČEK", "KRÁLÍK"], ["RAK", "KRAB"], ["RYBA", "ŽRALOK", "DELFÍN", "VELRYBA"],
-  ["MUŽ", "TATÍNEK", "DĚDEČEK", "CHLAPEC"], ["ŽENA"], ["KVĚTINA", "TULIPÁN", "RŮŽE", "KYTICE"],
-  ["LES", "STROM", "PRALES", "LIST", "TRÁVA"], ["HODINY", "BUDÍČEK", "HODINKY"], ["DŮM", "DOMEK", "HOTEL", "ŠKOLA", "PALÁC"],
-  ["VODA", "MOŘE"], ["DÉŠŤ", "POČASÍ", "MRAK"], ["ZIMA", "SNÍH", "LED"], ["NOTA", "PÍSEŇ"],
-  ["VÍNO", "LAHEV", "PIVO"], ["LŽÍCE", "PŘÍBOR"], ["MÍSA", "RÝŽE"], ["KABÁT", "KOŠILE", "ŠATY"],
+  ["MUŽ", "TATÍNEK", "DĚDEČEK", "CHLAPEC", "PAN", "ŽÁK", "PÍT"], ["ŽENA"], ["KVĚTINA", "TULIPÁN", "RŮŽE", "KYTICE", "MÁK", "PYL"],
+  ["LES", "STROM", "PRALES", "LIST", "TRÁVA", "SAD", "MÁJ", "VÁNOCE"], ["HODINY", "BUDÍČEK", "HODINKY"], ["DŮM", "DOMEK", "HOTEL", "ŠKOLA", "PALÁC", "VES", "BYT"],
+  ["VODA", "MOŘE"], ["DÉŠŤ", "POČASÍ", "MRAK"], ["ZIMA", "SNÍH", "LED", "PÓL"], ["NOTA", "PÍSEŇ"],
+  ["VÍNO", "LAHEV", "PIVO", "JED", "LAK"], ["LŽÍCE", "PŘÍBOR"], ["MÍSA", "RÝŽE"], ["KABÁT", "KOŠILE", "ŠATY"],
   ["DORT", "ZÁKUSEK", "KOLÁČ", "SUŠENKA"], ["BONBON", "LÍZÁTKO"], ["PERO", "TUŽKA", "PASTELKA"],
-  ["AUTO", "SANITKA", "AUTOBUS"], ["LETADLO", "VRTULNÍK", "RAKETA"], ["VČELA", "KOMÁR"], ["ČERV", "HAD"],
+  ["AUTO", "SANITKA", "AUTOBUS"], ["LETADLO", "VRTULNÍK", "RAKETA"], ["VČELA", "KOMÁR", "PYL"], ["ČERV", "HAD"],
   ["HORA", "KÁMEN"], ["MEČ", "NŮŽ"], ["ŠÍP", "SEKERA"], ["KOČKA", "TYGR", "LEV"], ["JABLKO", "HRUŠKA"],
   ["MELOUN", "OKURKA"], ["PAPRIKA", "OKURKA"], ["HOUBA", "DÝNĚ"],
 ];

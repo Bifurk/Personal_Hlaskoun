@@ -11,6 +11,8 @@ Seznam slov 1. úrovně bez obrázku: `uroven1.csv` (slovo, název souboru, dopo
 - **Kontrola:** obrázek musí jednoznačně poznat šestileté dítě a nesmí se plést s jiným obrázkem ve hře (např. GÓL × MÍČ, VES × DŮM).
 
 ## Zapracování (pro Clauda)
+Hotovo pro 36 slov 1. úrovně (A + B). Převod: `python3 -I tools/obrazky/prevod.py <složka s PNG>`.
+
 Obrázky uložit do `img/pics/SLOVO.webp` (512 px, kvalita ~85), v `js/pictures.js` u slova uvést cestu místo emoji
 (např. `LOS: "img:LOS"`), v aplikaci vykreslit `<img>` místo emoji, přidat soubory do cache service workeru,
 podobné obrázky zařadit do `PIC_GROUPS` a doplnit testy v `tests/s23.js` (obrázek se načte, vejde se, neplete se).
