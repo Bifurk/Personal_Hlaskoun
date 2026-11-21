@@ -604,8 +604,8 @@ export function installSteps(ios, inApp, ua) {
     " (vpravo nahoře ⋯ nebo ⋮ → Otevřít v prohlížeči) a pak to zkuste znovu.";
   if (ios && /CriOS/.test(ua)) return "Chrome na iPhonu: ťukněte vpravo nahoře v adresním řádku na Sdílet ⬆︎ → sjeďte dolů → „Přidat na plochu“ → Přidat. (Potřebuje iOS 16.4 a novější; jinak použijte Safari.)";
   if (ios && /FxiOS|EdgiOS/.test(ua)) return "Na iPhonu otevřete stránku v Safari: Sdílet ⬆︎ → „Přidat na plochu“ → Přidat.";
-  if (ios) return "Safari: ťukněte dole uprostřed na Sdílet ⬆︎ (čtvereček se šipkou) → sjeďte v nabídce dolů → „Přidat na plochu“ → vpravo nahoře Přidat.";
-  return "V prohlížeči ťukněte na ⋮ (Samsung Internet ≡) a zvolte „Přidat na plochu“ / „Nainstalovat aplikaci“.";
+  if (ios) return "Safari: ťukněte dole uprostřed na Sdílet ⬆︎ (čtvereček se šipkou) → sjeďte v nabídce dolů → „Přidat na plochu“ → vpravo nahoře Přidat. Chybí tam „Přidat na plochu“? Stránka je otevřená v náhledu z WhatsAppu či Messengeru – ťukněte vpravo dole na ikonu Safari 🧭 a zkuste to tam.";
+  return "V prohlížeči ťukněte na ⋮ (Samsung Internet ≡) a zvolte „Přidat na plochu“ / „Nainstalovat aplikaci“. Otevřeli jste odkaz z WhatsAppu? Nejdřív ⋮ → Otevřít v Chromu.";
 }
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 (() => {
