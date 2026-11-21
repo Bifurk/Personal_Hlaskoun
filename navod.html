@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hláskoun – návod pro rodiče</title>
+<meta name="description" content="Jak nainstalovat a nastavit Robota Hláskouna na telefonu s Androidem nebo na iPhonu.">
+<meta name="theme-color" content="#F3F7FF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121A2E" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F3F7FF; --surface: #FFFFFF; --ink: #1B2440; --muted: #5E6A85; --line: #D5DEF0;
+  --accent: #4A6FD8; --accent-ink: #FFFFFF; --ok: #1E9E63; --warn-bg: #FFF4D6; --warn-ink: #6B4B00; --chip: #E6EEFF;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121A2E; --surface: #1F2B47; --ink: #EEF2FF; --muted: #A5B1CC; --line: #33415F;
+    --accent: #7B9BFF; --accent-ink: #0B1222; --ok: #4ED39A; --warn-bg: #3A3016; --warn-ink: #FFE3A3; --chip: #26355A; color-scheme: dark;
+  }
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 1.0625rem/1.5 "Baloo 2", system-ui, sans-serif; }
+main { max-width: 640px; margin: 0 auto; padding: 16px 16px 48px; }
+h1 { font-size: 1.9rem; line-height: 1.1; margin: 8px 0 4px; }
+h2 { font-size: 1.35rem; margin: 0; line-height: 1.2; }
+h3 { font-size: 1.05rem; margin: 14px 0 4px; }
+p { margin: 6px 0; }
+a { color: var(--accent); font-weight: 700; }
+.lead { color: var(--muted); }
+.hero { display: flex; gap: 14px; align-items: center; margin: 4px 0 14px; }
+.hero img { width: 64px; height: 64px; border-radius: 16px; flex: none; }
+.card { background: var(--surface); border-radius: 20px; padding: 16px; margin: 14px 0; box-shadow: 0 2px 0 var(--line); }
+.card > header { display: flex; gap: 12px; align-items: center; margin-bottom: 6px; }
+.num { width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; flex: none; }
+.time { margin-left: auto; font-size: .8rem; color: var(--muted); white-space: nowrap; }
+ol.steps { margin: 6px 0 0; padding-left: 1.4em; }
+ol.steps li { margin: 6px 0; padding-left: 2px; }
+ol.steps li::marker { font-weight: 800; color: var(--accent); }
+.ui { display: inline-block; padding: 0 .4em; border-radius: 6px; background: var(--chip); font-weight: 700; white-space: nowrap; }
+.en { color: var(--muted); font-size: .9em; }
+.tip, .warn { border-radius: 14px; padding: 10px 12px; margin: 10px 0 2px; font-size: .95rem; }
+.tip { background: var(--chip); }
+.warn { background: var(--warn-bg); color: var(--warn-ink); }
+.done { color: var(--ok); font-weight: 800; }
+/* přepínač Android / iPhone */
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--chip); padding: 5px; border-radius: 16px; position: sticky; top: 8px; z-index: 2; }
+.tabs button { font: inherit; font-weight: 800; border: 0; border-radius: 12px; padding: 10px 6px; background: transparent; color: var(--ink); cursor: pointer; min-height: 48px; }
+.tabs button[aria-pressed="true"] { background: var(--surface); box-shadow: 0 2px 0 var(--line); }
+body[data-os="android"] .only-ios, body[data-os="ios"] .only-android { display: none; }
+.detected { font-size: .85rem; color: var(--muted); text-align: center; margin: 6px 0 0; }
+.qr { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.qr img { width: 132px; height: 132px; background: #fff; padding: 6px; border-radius: 12px; }
+.qr .link { flex: 1; min-width: 160px; overflow-wrap: anywhere; }
+.btn { display: inline-block; text-decoration: none; background: var(--accent); color: var(--accent-ink); font-weight: 800; padding: 10px 16px; border-radius: 14px; margin-top: 6px; }
+.games { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.games div { background: var(--chip); border-radius: 14px; padding: 10px; font-size: .92rem; }
+.games b { display: block; font-size: 1rem; }
+details { border-top: 1px solid var(--line); padding: 8px 0; }
+details:first-of-type { border-top: 0; }
+summary { font-weight: 800; cursor: pointer; padding: 4px 0; min-height: 32px; }
+footer { color: var(--muted); font-size: .85rem; text-align: center; margin-top: 24px; }
+@media print { .tabs { position: static; } body[data-os] .only-ios, body[data-os] .only-android { display: block; } .card { break-inside: avoid; } }
+</style>
+</head>
+<body data-os="android">
+<main>
+  <div class="hero">
+    <img src="icons/icon-192.png" alt="">
+    <div>
+      <h1>Robot Hláskoun</h1>
+      <p class="lead">Návod pro rodiče: instalace a nastavení zabere asi 5 minut.</p>
+    </div>
+  </div>
+
+  <nav class="tabs" aria-label="Typ telefonu">
+    <button type="button" data-os="android" aria-pressed="true">🤖 Android</button>
+    <button type="button" data-os="ios" aria-pressed="false">📱 iPhone</button>
+  </nav>
+  <p class="detected" id="detected"></p>
+
+  <!-- 1 -->
+  <section class="card" id="otevrit">
+    <header><span class="num">1</span><h2>Otevřete Hláskouna</h2><span class="time">½ min</span></header>
+    <div class="qr">
+      <img src="img/qr-app.svg" alt="QR kód s odkazem na Hláskouna">
+      <div class="link">
+        <p>Načtěte QR kód fotoaparátem telefonu, nebo otevřete odkaz:</p>
+        <p><a href="./" id="appLink">bifurk.github.io/Personal_Hlaskoun</a></p>
+        <p class="only-android">Otevřete ho v <b>Chromu</b> nebo v <b>Samsung Internetu</b>.</p>
+        <p class="only-ios">Otevřete ho v <b>Safari</b>.</p>
+      </div>
+    </div>
+    <div class="warn">Odkaz poslaný přes Messenger, Facebook nebo Instagram se otevře v prohlížeči uvnitř té aplikace, kde instalace nejde. Ťukněte tam na <b>⋯</b> / <b>⋮</b> → <b>Otevřít v prohlížeči</b><span class="only-ios"> (Safari)</span>.</div>
+  </section>
+
+  <!-- 2 -->
+  <section class="card" id="plocha">
+    <header><span class="num">2</span><h2>Přidejte ho na plochu</h2><span class="time">1 min</span></header>
+    <p>Pak se spouští z ikony jako běžná aplikace a funguje i bez internetu.</p>
+
+    <div class="only-android">
+      <h3>Chrome</h3>
+      <ol class="steps">
+        <li>Vpravo nahoře ťukněte na <span class="ui">⋮</span>.</li>
+        <li>Zvolte <span class="ui">Přidat na plochu</span> nebo <span class="ui">Nainstalovat aplikaci</span> <span class="en">(Add to Home screen / Install app)</span>.</li>
+        <li>Potvrďte <span class="ui">Nainstalovat</span>.</li>
+      </ol>
+      <h3>Samsung Internet</h3>
+      <ol class="steps">
+        <li>Dole vpravo ťukněte na <span class="ui">≡</span>.</li>
+        <li><span class="ui">Přidat stránku do</span> → <span class="ui">Domovská obrazovka</span>.</li>
+      </ol>
+    </div>
+
+    <div class="only-ios">
+      <h3>Safari</h3>
+      <ol class="steps">
+        <li>Dole uprostřed ťukněte na <span class="ui">Sdílet ⬆︎</span> (čtvereček se šipkou).</li>
+        <li>V nabídce <b>sjeďte dolů</b> a ťukněte na <span class="ui">Přidat na plochu</span> <span class="en">(Add to Home Screen)</span>.</li>
+        <li>Vpravo nahoře ťukněte na <span class="ui">Přidat</span>.</li>
+      </ol>
+      <p class="tip">V Chromu na iPhonu je <b>Sdílet ⬆︎</b> vpravo v adresním řádku (funguje od iOS 16.4).</p>
+    </div>
+    <p class="done">✓ Na ploše je ikona robota „Hláskoun“.</p>
+  </section>
+
+  <!-- 3 -->
+  <section class="card" id="hlas">
+    <header><span class="num">3</span><h2>Nastavte hezký český hlas</h2><span class="time">2 min</span></header>
+    <p>Hláskoun čte slova a pokyny hlasem telefonu. Nejlépe zní hlas Googlu (Android) nebo „Zuzana – vylepšená“ (iPhone).</p>
+
+    <div class="only-android">
+      <ol class="steps">
+        <li>V <b>Obchodě Play</b> vyhledejte <span class="ui">Řečové služby od Googlu</span> <span class="en">(Speech Recognition and Synthesis from Google)</span> a ťukněte na <span class="ui">Instalovat</span> / <span class="ui">Aktualizovat</span>.</li>
+        <li>Otevřete <b>Nastavení</b> telefonu, nahoře ťukněte na <span class="ui">🔍</span> a napište <b>„převod textu“</b> <span class="en">(text-to-speech)</span>.</li>
+        <li>Otevřete <span class="ui">Převod textu na řeč</span> a ťukněte na <b>text</b> <span class="ui">Preferovaný modul</span> (ne na ozubené kolečko) → vyberte <b>Google</b>.</li>
+        <li>Teď ťukněte na <span class="ui">⚙️</span> vedle Preferovaného modulu → <span class="ui">Instalovat hlasová data</span> → <span class="ui">Čeština</span>.</li>
+        <li>Pokud je vedle češtiny <b>koš 🗑️</b>, hlas je už stažený – vyberte <span class="ui">Hlas I</span> a hotovo.</li>
+      </ol>
+      <p class="tip">Vyzkoušení: v Převodu textu na řeč zvolte <span class="ui">Jazyk</span> → Čeština → <span class="ui">Přehrát</span>.</p>
+    </div>
+
+    <div class="only-ios">
+      <ol class="steps">
+        <li>Otevřete <b>Nastavení</b> → <span class="ui">Zpřístupnění</span> → <span class="ui">Předčítaný obsah</span> → <span class="ui">Hlasy</span>.</li>
+        <li>Zvolte <span class="ui">Čeština</span> → <span class="ui">Zuzana</span> → stáhněte <span class="ui">Zuzana (vylepšená)</span>.</li>
+      </ol>
+      <div class="warn"><b>Přepínač tichého režimu</b> na boku iPhonu může ztlumit zvuk. Pokud Hláskoun nemluví, přepněte ho (oranžová značka nesmí být vidět) a přidejte hlasitost.</div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="card" id="nastaveni">
+    <header><span class="num">4</span><h2>Nastavte Hláskouna</h2><span class="time">1 min</span></header>
+    <ol class="steps">
+      <li>Spusťte Hláskouna z ikony na ploše.</li>
+      <li>Otevřete <b>koutek pro rodiče</b>: <b>podržte ⚙️</b> vpravo nahoře asi 2 vteřiny (kroužek se zaplní), nebo na ⚙️ <b>5× rychle ťukněte</b>. Dítě se tam tak náhodou nedostane.</li>
+      <li>Ťukněte na <span class="ui">⚙️ Nastavení hlasu a hry</span>.</li>
+      <li><b>Hlas pro celá slova</b> → <span class="ui">Vždy hlas telefonu (i pochvaly)</span>. Hláskoun hned přečte ukázkové slovo.</li>
+      <li><b>Hlas pro hlásky</b> → <span class="ui">Výchozí nahrávky aplikace</span>, nebo si je namluvte (krok 5).</li>
+    </ol>
+    <details>
+      <summary>Co znamenají ostatní volby</summary>
+      <p><b>Tempo hláskování</b> – delší pauza mezi hláskami pro začátečníky.</p>
+      <p><b>Hláskovat podle výslovnosti</b> – zapnuto: „věž“ zazní v-j-e-š, „led“ l-e-t (jak se mluví). Vypněte, pokud to dítě plete s písmeny.</p>
+      <p><b>Malá písmena</b> – místo velkých tiskacích (podle toho, co se učí ve škole).</p>
+      <p><b>Vibrace</b> – telefon jemně zavibruje při správné i špatné odpovědi.</p>
+    </details>
+  </section>
+
+  <!-- 5 -->
+  <section class="card" id="vlastni">
+    <header><span class="num">5</span><h2>Volitelně: váš hlas</h2><span class="time">3 min</span></header>
+    <p>Dítě často lépe reaguje na hlas maminky nebo tatínka. V koutku pro rodiče:</p>
+    <ul>
+      <li><span class="ui">🎙️ Namluvit hlásky</span> – ťukněte na hlásku a řekněte jen hlásku: „sss“, ne „es“; „mmm“, ne „em“; u p, t, k, b, d jen krátký ráz.</li>
+      <li><span class="ui">🗣️ Namluvit slova</span> – slovo, které nezní dobře, nahrajete sami (jde vrátit původní).</li>
+    </ul>
+    <p>Pak v Nastavení zvolte <b>Moje nahrávky</b>. Mikrofon je potřeba povolit, když se telefon zeptá.</p>
+  </section>
+
+  <!-- 6 -->
+  <section class="card" id="hrani">
+    <header><span class="num">6</span><h2>Dítě hraje samo</h2></header>
+    <p>Robot říká pokyny nahlas, číst nic nemusí. Každé kolo má 5 slov, za slovo bez chyby je zlatá hvězda.</p>
+    <div class="games">
+      <div><b>👂 Poslouchej</b>Robot vyhláskuje slovo, dítě ťukne na obrázek.</div>
+      <div><b>A První hláska</b>Uslyší slovo a vybere první písmeno.</div>
+      <div><b>🧩 Skládej</b>Skládá slovo z písmenek.</div>
+      <div><b>📖 Čti</b>Přečte slovo a ťukne na obrázek.</div>
+    </div>
+    <p class="tip">Obtížnost se mění sama. V koutku pro rodiče ťukněte na název hry – uvidíte, která slova dítě umí a ve kterých chybuje.</p>
+  </section>
+
+  <!-- 7 -->
+  <section class="card" id="problemy">
+    <header><span class="num">?</span><h2>Když něco nejde</h2></header>
+    <details>
+      <summary>Hláskoun nemluví</summary>
+      <p>Přidejte hlasitost médií. Hláskouna úplně zavřete (v přehledu aplikací ho odsuňte nahoru) a otevřete znovu. Zkontrolujte krok 3.</p>
+      <p class="only-ios">Na iPhonu vypněte tichý režim (přepínač na boku).</p>
+    </details>
+    <details>
+      <summary>Nejde přidat na plochu</summary>
+      <p>Stránka je nejspíš otevřená v prohlížeči uvnitř jiné aplikace (Messenger, Facebook…). Otevřete odkaz v <span class="only-android">Chromu</span><span class="only-ios">Safari</span> (krok 1).</p>
+    </details>
+    <details>
+      <summary>Nejde otevřít koutek pro rodiče</summary>
+      <p>Na ⚙️ vpravo nahoře <b>5× rychle ťukněte</b>.</p>
+    </details>
+    <details>
+      <summary>Hláskoun vypadá jinak než předtím / starší verze</summary>
+      <p>Aplikace se aktualizuje sama, když je telefon online. Zavřete ji a otevřete znovu, případně dvakrát.</p>
+    </details>
+    <details>
+      <summary>Chci nahlásit chybu</summary>
+      <p>V koutku pro rodiče ťukněte na <span class="ui">🩺 Diagnostika</span> → <span class="ui">📋 Zkopírovat</span> a text pošlete. Neobsahuje nahrávky ani osobní údaje.</p>
+    </details>
+    <details>
+      <summary>Kde jsou data dítěte?</summary>
+      <p>Jen v tomto telefonu: pokrok, hvězdy, nastavení i vaše nahrávky. Nikam se neposílají a do jiného telefonu se nepřenáší – druhý telefon začíná od nuly.</p>
+    </details>
+  </section>
+
+  <p style="text-align:center"><a class="btn" href="./">▶ Otevřít Hláskouna</a></p>
+  <footer>Robot Hláskoun · bez reklam, bez registrace, data zůstávají v telefonu</footer>
+</main>
+<script>
+(() => {
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const android = /Android/.test(ua);
+  const set = os => {
+    document.body.dataset.os = os;
+    for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-pressed", String(b.dataset.os === os));
+  };
+  for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => { set(b.dataset.os); document.getElementById("detected").textContent = ""; });
+  set(ios ? "ios" : "android");
+  document.getElementById("detected").textContent = ios ? "Ukazuji postup pro iPhone." : android ? "Ukazuji postup pro Android." : "Vyberte typ telefonu, na kterém bude dítě hrát.";
+})();
+</script>
+</body>
+</html>

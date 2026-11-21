@@ -526,6 +526,28 @@ function serve() {
     await shot("7-diagnostika");
     await ev(() => { for (const d of document.querySelectorAll("dialog[open]")) d.close(); });
 
+    /* ---------- návod pro rodiče (navod.html) ---------- */
+    check("v koutku pro rodiče je odkaz na návod", await ev(() => document.querySelector("#pGuide")?.getAttribute("href") === "navod.html"));
+    const gp = await ctx.newPage();
+    gp.on("pageerror", e => errors.push("návod: " + e.message));
+    gp.on("response", r => { if (r.status() >= 400) bad.push(`${r.status()} ${r.url()}`); });
+    for (const [w, hgt] of [[360, 780], [320, 640], [412, 915], [390, 844]]) {
+      await gp.setViewportSize({ width: w, height: hgt });
+      await gp.goto(new URL("navod.html", url).href, { waitUntil: "load" });
+      const g = await gp.evaluate(() => ({ hs: document.documentElement.scrollWidth <= innerWidth && [...document.querySelectorAll(".card *")].every(e => e.getBoundingClientRect().right <= e.closest(".card").getBoundingClientRect().right + 1), os: document.body.dataset.os,
+        qr: document.querySelector('img[src="img/qr-app.svg"]').naturalWidth > 0, steps: document.querySelectorAll("section.card").length,
+        androidVisible: !!document.querySelector(".only-android")?.offsetParent }));
+      check(`návod ${w}×${hgt}: načte se, bez posouvání do strany, QR kód`, g.hs && g.qr && g.steps >= 7, JSON.stringify(g));
+    }
+    check("návod: na Androidu ukazuje postup pro Android", await gp.evaluate(() => document.body.dataset.os === "android" && !!document.querySelector(".only-android").offsetParent && !document.querySelector(".only-ios").offsetParent));
+    await gp.locator('.tabs button[data-os="ios"]').tap();
+    check("návod: přepnutí na iPhone ukáže postup pro iPhone", await gp.evaluate(() => !!document.querySelector(".only-ios").offsetParent && !document.querySelector(".only-android").offsetParent));
+    await gp.screenshot({ path: path.join(OUT, `s23-${bname}-navod.png`), fullPage: true });
+    await gp.close();
+    const ip = await browser.newPage({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1", viewport: { width: 390, height: 844 } });
+    await ip.goto(new URL("navod.html", url).href); check("návod: na iPhonu se sám přepne na postup pro iPhone", await ip.evaluate(() => document.body.dataset.os === "ios"));
+    await ip.close();
+
     check("žádné chyby v konzoli", errors.length === 0, errors.slice(0, 5).join(" | "));
     check("žádné chybějící soubory", bad.length === 0, bad.join(" | "));
     await ctx.close();

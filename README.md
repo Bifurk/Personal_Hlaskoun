@@ -15,6 +15,8 @@ Každé kolo má 5 slov. Za slovo bez chyby je zlatá hvězda, s chybou stříbr
 
 ## Pro rodiče
 
+Návod k instalaci a nastavení: **https://bifurk.github.io/Personal_Hlaskoun/navod.html** (odkaz je i v koutku pro rodiče).
+
 Podržte ⚙️ vpravo nahoře 1,5 s. Tam je:
 - **Namluvit hlásky** – hláskování vlastním hlasem,
 - **Namluvit slova** – slovo, které nezní dobře, namluvíte sami (má přednost, jde vrátit),
