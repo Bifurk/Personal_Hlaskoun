@@ -143,6 +143,7 @@ function serve() {
     const steps = await ev(() => ({ safari: hl.installSteps(true, false, "iPhone Safari"), chrome: hl.installSteps(true, false, "iPhone CriOS/120"),
       inapp: hl.installSteps(true, true, "iPhone FBAV"), android: hl.installSteps(false, false, "Android") }));
     check("iPhone návod: Safari – Sdílet → Přidat na plochu", /Safari.*Sdílet.*Přidat na plochu/.test(steps.safari), steps.safari);
+    check("iPhone návod: nové Safari (iOS 26+) – ⋯ → Sdílet", /iOS 26.*⋯ → Sdílet/.test(steps.safari), steps.safari);
     check("návod v aplikaci: jak z náhledu WhatsAppu do prohlížeče (iPhone i Android)", /WhatsAppu.*Safari/.test(steps.safari) && /WhatsAppu.*Chromu/.test(steps.android), steps.android);
     check("iPhone návod: Chrome – Sdílet v adresním řádku", /Chrome na iPhonu.*Sdílet/.test(steps.chrome), steps.chrome);
     check("iPhone návod: prohlížeč v aplikaci → otevřít v Safari", /uvnitř jiné aplikace.*Safari/.test(steps.inapp), steps.inapp);
