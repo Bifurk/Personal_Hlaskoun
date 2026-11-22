@@ -88,16 +88,16 @@ export const UNKNOWN_WORDS = new Set(["LEN", "LÍN", "SÁL", "HÁJ", "CIT", "HON
 export const GAMES = {
   listen: { icon: "👂", label: "Poslouchej", color: "blue",
     say: "Poslouchej robota a ťukni na správný obrázek.",
-    tiers: [[1], [2], [3], [4, 5], [6, 7], [8, 9]], pool: lv => PIC_WORDS.filter(w => lv.includes(LEVEL_OF[w])) },
+    tiers: [[1], [2], [3], [4, 5, 11], [6, 7, 10], [8, 9]], pool: lv => PIC_WORDS.filter(w => lv.includes(LEVEL_OF[w])) },
   first: { icon: "A", label: "První hláska", color: "orange",
     say: "Jakým písmenem začíná slovo?",
-    tiers: [[1], [2], [3], [4], [5], [6], [7], [8], [9]], pool: lv => wordsOfLevels(lv).filter(w => firstOk(w) && audio.canSay(w) && !UNKNOWN_WORDS.has(w)) },
+    tiers: [[1], [2], [3], [4], [5, 11], [6], [7], [8], [9, 10]], pool: lv => wordsOfLevels(lv).filter(w => firstOk(w) && audio.canSay(w) && !UNKNOWN_WORDS.has(w)) },
   build: { icon: "🧩", label: "Skládej", color: "green",
     say: "Poslouchej a slož slovo z písmenek.",
-    tiers: [[1], [2], [3], [9], [4], [6], [5], [7], [8]], pool: lv => wordsOfLevels(lv).filter(w => audio.canSay(w) && !UNKNOWN_WORDS.has(w)) },
+    tiers: [[1], [2], [3], [9, 10], [4], [6], [5, 11], [7], [8]], pool: lv => wordsOfLevels(lv).filter(w => audio.canSay(w) && !UNKNOWN_WORDS.has(w)) },
   read: { icon: "📖", label: "Čti", color: "purple",
     say: "Přečti slovo a ťukni na obrázek.",
-    tiers: [[1], [2], [3], [4, 5], [6, 7], [8, 9]], pool: lv => PIC_WORDS.filter(w => lv.includes(LEVEL_OF[w])) },
+    tiers: [[1], [2], [3], [4, 5, 11], [6, 7, 10], [8, 9]], pool: lv => PIC_WORDS.filter(w => lv.includes(LEVEL_OF[w])) },
 };
 const ROUND = 5;
 const tierOf = g => Math.min(progress.tier[g] || 0, GAMES[g].tiers.length - 1);
@@ -631,5 +631,5 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 renderGames();
 
 /* Pro testy (tests/s23.js) */
-window.hl = { core, audio, R, GAMES, startGame, installSteps, learningSummary, applyTier, UNKNOWN_WORDS, fitScreen, picEl, needsAllCorrect, pictureOptions, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
+window.hl = { core, audio, R, GAMES, startGame, spell, letters, installSteps, learningSummary, applyTier, UNKNOWN_WORDS, fitScreen, picEl, needsAllCorrect, pictureOptions, openStats, coverage, tierPool, weight, chooseWords: g => chooseWords(g), ADVANCE_COVERAGE, openParent, openRec, openWordRec, openSet, renderDiag, tierOf, chooseWords, firstOk, show,
   get current() { return current; } };

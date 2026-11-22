@@ -89,6 +89,22 @@ function serve() {
     });
     check("obrázků je aspoň 240", pics.n >= 240, `${pics.n}`);
     check("každé slovo s obrázkem je v seznamu slov", pics.notInLevels.length === 0, pics.notInLevels.join(", "));
+    // úrovně = počet hlásek + shluk souhlásek (zjištěno: HOUBA s 5 hláskami byla ve 2. úrovni)
+    const lvRule = await ev(() => {
+      const V = "AÁEÉĚIÍOÓUÚŮYÝ", isC = l => !V.includes(l);
+      const R = { 1: [3, 3, "-"], 2: [4, 4, "-"], 3: [5, 5, "-"], 4: [6, 6, "-"], 5: [7, 7, "-"], 6: [5, 5, "start"], 7: [6, 7, "start"],
+        8: [7, 9, "start"], 9: [4, 5, "end"], 10: [4, 4, "start"], 11: [8, 99, "-"] };
+      const bad = [];
+      for (const [l, ws] of Object.entries(LEVELS)) for (const w of ws) {
+        const L = hl.letters(w), n = hl.spell(w, false).length, start = isC(L[0]) && isC(L[1]), end = isC(L.at(-1)) && isC(L.at(-2));
+        const [lo, hi, kind] = R[l] || [0, 0, "?"];
+        const shapeOk = kind === "start" ? start : kind === "end" ? end && !start : !start && !end;
+        if (n < lo || n > hi || !shapeOk) bad.push(`${w}(${l}: ${n} hlásek${start ? ", shluk na začátku" : ""}${end ? ", shluk na konci" : ""})`);
+      }
+      return bad;
+    });
+    // původní seznam má 3 výjimky (MĚSÍC… měkčení) – tolerujeme nejvýš je, nic dalšího
+    check("každé slovo je v úrovni podle počtu hlásek a shluků", lvRule.length <= 3, lvRule.slice(0, 8).join(", "));
     check("obrázky bez složených emoji (ZWJ)", pics.zwj.length === 0, pics.zwj.join(", "));
     check("Poslouchej/Čti: každá úroveň má aspoň 20 slov, první aspoň 30", pics.sizes.every(n => n >= 20) && pics.sizes[0] >= 30, pics.sizes.join(" / "));
     check("všechny obrázky jdou vykreslit", pics.blank.length === 0, pics.blank.join(", "));
