@@ -316,7 +316,9 @@ function gBuild(W, first) {
       if (pos === L.length) { R.busy = true; slots.forEach(s => s.classList.add("ok")); wait(350).then(() => sayWord(W)).then(() => { R.busy = false; correct(null); }); }
     } else {
       missHere++;
-      R.letter = L[pos]; wrong(k, null, b.l);
+      // hlasová nápověda: po 1. chybě robot zopakuje slovo, pak řekne hlásku, která má přijít
+      R.letter = L[pos]; const need = L[pos];
+      wrong(k, () => missHere === 1 ? sayWord(W) : wait(250).then(() => sayPhone(letterSound(need))), b.l);
       setTimeout(() => k.classList.remove("bad"), 600);
       if (missHere >= 2) keys.find(q => !q.disabled && bank[keys.indexOf(q)].l === L[pos])?.classList.add("hint");
     }
@@ -552,7 +554,7 @@ export function openSet() {
   voiceNote(); $("dlgSet").showModal();
 }
 const sample = () => R.word || "PES";
-$("wordVoice").onchange = e => { settings.wordVoice = e.target.value; saveSettings(); voiceNote(); diag("hlas slov: " + settings.wordVoice); stopAll(); sayWord(sample()); };
+$("wordVoice").onchange = e => { audio._resetTts(); settings.wordVoice = e.target.value; saveSettings(); voiceNote(); diag("hlas slov: " + settings.wordVoice); stopAll(); sayWord(sample()); };
 $("phoneVoice").onchange = e => { settings.phoneVoice = e.target.value; saveSettings(); audio.applyPhoneVoice(); voiceNote(); diag("hlas hlásek: " + settings.phoneVoice); stopAll(); spellOut(sample()); };
 $("gap").oninput = e => { settings.gap = +e.target.value; saveSettings(); };
 for (const k of ["assim", "lower", "vibrate"]) $(k).onchange = e => { settings[k] = e.target.checked; saveSettings(); };

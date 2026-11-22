@@ -77,21 +77,34 @@ export function pickVoice() {
 }
 export const _setVoice = v => { csVoice = v; };   // testy
 if (window.speechSynthesis) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+/* Hlas telefonu. Vrací true, když opravdu promluvil. Starší telefony (např. Galaxy J5) hlásí český hlas,
+   ale nemluví (hlas nestažený, modul nefunkční) – pak se do 1,6 s nic nestane: vrátí false, zapíše se
+   ttsBroken a aplikace dál používá nahrávky (sayWord/phrase), aby dítě nečekalo na slovo, které nezazní. */
+export let ttsBroken = false;
+export const _resetTts = () => { ttsBroken = false; };   // po změně hlasu v nastavení / v testech
 export function ttsSay(text, rate = 0.85) {
-  if (hooks.tts) { hooks.tts(text); return Promise.resolve(); }
+  if (hooks.tts) { const r = hooks.tts(text); return Promise.resolve(r !== false); }
   return new Promise(res => {
-    let done = false; const fin = () => { if (done) return; done = true; talk(false); res(); };
+    let done = false, spoke = false;
+    const fin = ok => { if (done) return; done = true; talk(false); res(ok); };
     try {
       const u = new SpeechSynthesisUtterance(text); u.lang = "cs-CZ"; try { u.voice = csVoice; } catch (e) {} u.rate = rate;
-      u.onend = fin; u.onerror = fin;
+      u.onstart = () => { spoke = true; };
+      u.onend = () => fin(true); u.onerror = () => fin(spoke);
       speechSynthesis.cancel(); talk(true); speechSynthesis.speak(u);
-    } catch (e) { fin(); }
-    setTimeout(fin, 1500 + text.length * 120);
+    } catch (e) { fin(false); }
+    setTimeout(() => { if (!spoke && !done) { try { speechSynthesis.cancel(); } catch (e) {} fin(false); } }, 1600);
+    setTimeout(() => fin(spoke), 1600 + text.length * 120);
   });
 }
-const canTts = () => settings.wordVoice !== "robot" && csVoice;
+async function tts(text, rate) {
+  const ok = await ttsSay(text, rate);
+  if (!ok && !ttsBroken) { ttsBroken = true; diag("hlas telefonu nemluví – používám nahrávky aplikace"); }
+  return ok;
+}
+const canTts = () => settings.wordVoice !== "robot" && csVoice && !ttsBroken;
 /** Umí aplikace slovo vyslovit? (nahrávka aplikace, moje nahrávka, nebo hlas telefonu) */
-export const canSay = W => AUDIO_KEYS.has("w_" + W) || ownWords.has(W) || !!(csVoice && settings.wordVoice !== "robot");
+export const canSay = W => AUDIO_KEYS.has("w_" + W) || ownWords.has(W) || !!canTts();
 
 /* ---------- moje nahrávky (IndexedDB „hlaskoun“ / „rec“: hlásky pod klíčem „a“, „ch“…, slova pod „w:SLOVO“) ---------- */
 let dbp = null;
@@ -175,14 +188,14 @@ export async function sayWord(W) {
     const wv = settings.wordVoice, key = "w_" + W;
     if (wv === "own" && ownWords.has(W)) { const b = await loadOwnWord(W); if (b) return playBuf(b); }
     if ((wv === "own" || wv === "recorded") && OWNV.has(key)) { const b = await load(key); if (b) return playBuf(b); }
-    if (canTts()) return ttsSay(W.toLowerCase());
+    if (canTts() && await tts(W.toLowerCase())) return;
     const b = await load(key); if (b) return playBuf(b);
   } catch (e) { diag("slovo " + W + ": " + e.message); }
 }
 /** Jedna hláska (klíč nahrávky: „a“, „ch“…) */
 export async function sayPhone(k) { const b = REC[k]; if (b) return playBuf(b); }
 /** Pokyn nebo pochvala hlasem telefonu (bez českého hlasu se nic neřekne – hry mají i obrazovou nápovědu) */
-export async function sayText(t) { if (csVoice && settings.wordVoice !== "robot") return ttsSay(t, 0.95); }
+export async function sayText(t) { if (canTts()) return tts(t, 0.95); }
 
 export async function spellOut(W, onStep, slower = 1) {   // slower > 1: delší pauzy (pomoc po chybě)
   const my = ++token, ph = spell(W, settings.assim);
@@ -204,12 +217,12 @@ const PHR = { ok1: "Správně!", ok2: "Výborně!", ok3: "Super!", no: "Zkus to 
 let lastPraise = "";
 async function phrase(k, ttsChoices) {
   if (!settings.sound) return;
-  if (settings.wordVoice === "device" && csVoice) {
+  if (settings.wordVoice === "device" && canTts()) {
     let t; do { t = ttsChoices[Math.floor(Math.random() * ttsChoices.length)]; } while (t === lastPraise && ttsChoices.length > 1);
-    lastPraise = t; return ttsSay(t, 0.95);
+    lastPraise = t; if (await tts(t, 0.95)) return;
   }
   const b = await load("x_" + k); if (b) return playBuf(b);
-  if (canTts()) return ttsSay(PHR[k], 0.95);
+  if (canTts()) return tts(PHR[k], 0.95);
 }
 export const praise = () => phrase("ok" + (1 + Math.floor(Math.random() * 3)), PRAISE_TTS);
 export const oops = () => phrase("no", OOPS_TTS);

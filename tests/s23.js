@@ -295,6 +295,19 @@ function serve() {
     await shot("8-prehled-slov");
     await ev(() => { for (const d of document.querySelectorAll("dialog[open]")) d.close(); });
 
+    /* ---------- Skládej: hlasová nápověda po chybě ---------- */
+    const hint = await ev(async () => {
+      await hl.startGame("build", ["PES", "PES", "PES", "PES", "PES"]); await new Promise(r => setTimeout(r, 900));
+      const heard = []; hl.audio.hooks.playBuf = b => { heard.push(b === hl.audio.buf["w_PES"] ? "slovo" : b === hl.audio.REC["p"] ? "p" : "jiné"); };
+      const wrongKey = [...document.querySelectorAll(".key:not([disabled])")].find(k => !/^P$/i.test(k.textContent.trim()));
+      wrongKey.click(); await new Promise(r => setTimeout(r, 1800));
+      const afterFirst = [...heard]; wrongKey.click(); await new Promise(r => setTimeout(r, 1800));
+      hl.audio.hooks.playBuf = null; return { afterFirst, all: heard };
+    });
+    check("Skládej: po 1. chybě robot zopakuje slovo", hint.afterFirst.includes("slovo"), JSON.stringify(hint));
+    check("Skládej: po 2. chybě robot řekne hlásku, která má přijít", hint.all.slice(hint.afterFirst.length).includes("p"), JSON.stringify(hint));
+    await page.tap("#homeBtn"); await page.waitForTimeout(300);
+
     /* ---------- odolnost zvuku (Android uspí AudioContext) ---------- */
     await suspend();
     await notHung("hláskování po uspání zvuku doběhne", () => hl.audio.spellOut("NOS"));
@@ -358,6 +371,7 @@ function serve() {
 
     /* ---------- volba hlasu: odkud se slovo/hláska opravdu přehraje ---------- */
     const source = W => ev(async W => {
+      hl.audio._resetTts();   // emulace nemá skutečný hlas telefonu – podstrčený hlas by se jinak označil jako „nemluví“
       let src = "nic";
       hl.audio.hooks.playBuf = b => { src = b === hl.audio.WREC[W] ? "moje" : (b === hl.audio.buf["w_" + W] ? (OWNV.has("w_" + W) ? "aplikace" : "robot") : "jiné"); };
       hl.audio.hooks.tts = () => { src = "telefon"; };
@@ -376,7 +390,7 @@ function serve() {
       check(`hlas slov „${v}“: slovo s nahrávkou aplikace → ${b}`, app ? b === app : ["robot", "aplikace"].includes(b));
     }
     // pochvaly a „zkus to znovu“ mluví stejným hlasem jako slova
-    const phraseSrc = fn => ev(async fn => { let src = "nic";
+    const phraseSrc = fn => ev(async fn => { let src = "nic"; hl.audio._resetTts();
       hl.audio.hooks.playBuf = () => { src = "nahrávka"; }; hl.audio.hooks.tts = t => { src = "telefon:" + t; };
       await hl.audio[fn](); hl.audio.hooks.playBuf = hl.audio.hooks.tts = null; return src; }, fn);
     for (const v of ["own", "recorded", "device", "robot"]) {
@@ -392,6 +406,22 @@ function serve() {
     const praises = new Set(); for (let k = 0; k < 12; k++) praises.add(await phraseSrc("praise"));
     check("hlas telefonu: pochvaly se střídají", praises.size >= 3, [...praises].join(" "));
     check("popis hlasu ukazuje hlas telefonu", /Google čeština/.test(await page.textContent("#voiceNote")));
+    // telefon hlásí český hlas, ale nemluví (starší Samsung) → záložní nahrávka, dál už jen nahrávky
+    const silent = await ev(async () => {
+      hl.audio._resetTts(); hl.audio._setVoice({ name: "Samsung (test)", lang: "cs-CZ" });
+      let played = null, tried = 0;
+      hl.audio.hooks.tts = () => { tried++; return false; };          // hlas „mluví“, ale nic neřekne
+      hl.audio.hooks.playBuf = b => { if (b === hl.audio.buf["w_PES"]) played = "PES"; };
+      await hl.audio.sayWord("PES"); const first = played; played = null;
+      await hl.audio.sayWord("PES");
+      const r = { first, second: played, tried, broken: hl.audio.ttsBroken, logged: /hlas telefonu nemluví/.test(hl.core.DIAG.slice(-5).join(" ")),
+        canSayNew: hl.audio.canSay("LEV") };
+      hl.audio.hooks.tts = hl.audio.hooks.playBuf = null; hl.audio._resetTts(); return r;
+    });
+    check("hlas telefonu mlčí → slovo zazní z nahrávky aplikace", silent.first === "PES" && silent.second === "PES", JSON.stringify(silent));
+    check("hlas telefonu mlčí → příště se už nezkouší a je to v diagnostice", silent.tried === 1 && silent.broken && silent.logged, JSON.stringify(silent));
+    check("hlas telefonu mlčí → slova bez nahrávky se nenabízí", silent.canSayNew === false);
+    await ev(() => hl.audio._setVoice({ name: "Google čeština (test)", lang: "cs-CZ" }));
     const ph = await ev(() => Object.keys(hl.audio.OWNP)[0]);
     await page.selectOption("#phoneVoice", "default"); await page.waitForTimeout(150);
     check("hlásky „výchozí“: použije se nahrávka aplikace", await ev(k => hl.audio.REC[k] === hl.audio.DEFP[k] && hl.audio.REC[k] !== hl.audio.OWNP[k], ph));
