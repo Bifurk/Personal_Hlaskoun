@@ -383,8 +383,9 @@ function serve() {
     await ev(() => hl.audio._setVoice({ name: "Google čeština (test)", lang: "cs-CZ" }));   // openSet volá pickVoice
     const expect = { own: ["moje", "aplikace"], recorded: [null, "aplikace"], device: ["telefon", "telefon"], robot: [null, null] };
     for (const [v, [mine, app]] of Object.entries(expect)) {
-      await page.selectOption("#wordVoice", v); await page.waitForTimeout(150);
-      await ev(() => hl.audio._setVoice({ name: "Google čeština (test)", lang: "cs-CZ" }));
+      await page.selectOption("#wordVoice", v);
+      await page.waitForTimeout(2500);   // ukázka po přepnutí volby (na webu se nahrávka stahuje) musí dohrát, jinak se změří ona
+      await ev(() => { hl.audio.stopAll(); hl.audio._setVoice({ name: "Google čeština (test)", lang: "cs-CZ" }); });
       const a = await source(recWord), b = await source(appWord);
       check(`hlas slov „${v}“: moje namluvené slovo → ${a}`, mine ? a === mine : a !== "moje" && (v !== "robot" || a !== "telefon"));
       check(`hlas slov „${v}“: slovo s nahrávkou aplikace → ${b}`, app ? b === app : ["robot", "aplikace"].includes(b));
